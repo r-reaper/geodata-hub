@@ -101,6 +101,23 @@ def upload_file_to_s3(local_path: str, object_key: str) -> str | None:
         return None
 
 
+def download_file_from_s3(object_key: str, local_path: str) -> bool:
+    """Download a file from S3-compatible storage to a local path."""
+    if not S3_ACCESS_KEY:
+        return False
+    try:
+        client = get_s3_client()
+        client.download_file(S3_BUCKET_NAME, object_key, local_path)
+        log.info(f"Downloaded from S3: {object_key} → {local_path}")
+        return True
+    except ClientError as e:
+        log.error(f"S3 download failed for {object_key}: {e}")
+        return False
+    except Exception as e:
+        log.error(f"Unexpected S3 download error for {object_key}: {e}")
+        return False
+
+
 def delete_s3_object(object_key: str) -> bool:
     """Delete an object from S3 (used for cleanup / expiry)."""
     if not S3_ACCESS_KEY:
