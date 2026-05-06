@@ -1,0 +1,14 @@
+{
+  "slug": "province",
+  "feature_count": 135,
+  "bbox": [
+    96.1510692,
+    5.0763369,
+    107.6919676,
+    24.1590668
+  ],
+  "last_refreshed": "2026-05-06T21:22:55.291662",
+  "name_en": "Province Boundaries",
+  "name_th": "ขอบเขตจังหวัด",
+  "geom_type": "Polygon"
+}

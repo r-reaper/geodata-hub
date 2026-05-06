@@ -1,0 +1,14 @@
+{
+  "slug": "roads",
+  "feature_count": 173841,
+  "bbox": [
+    97.1485475,
+    6.4127121,
+    105.940004,
+    20.7587627
+  ],
+  "last_refreshed": "2026-05-06T21:23:40.690776",
+  "name_en": "Road Network",
+  "name_th": "เส้นทางจราจร",
+  "geom_type": "Linestring"
+}

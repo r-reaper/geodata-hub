@@ -1,0 +1,17 @@
+{
+  "aoi": {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [[
+        [100.3, 13.3],
+        [100.8, 13.3],
+        [100.8, 13.9],
+        [100.3, 13.9],
+        [100.3, 13.3]
+      ]]
+    }
+  },
+  "layers": ["waterways"],
+  "formats": ["shp", "geojson"]
+}

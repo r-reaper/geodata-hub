@@ -1,0 +1,31 @@
+# Secrets — never commit
+backend/.env
+frontend/.env.local
+backend/credits.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# Node
+frontend/node_modules/
+frontend/.next/
+
+# Data (large GeoJSON files — store in R2, not git)
+data/*.geojson
+data/*.zip
+
+# Build artifacts
+*.zip
+clip_result.zip
+clip_test.zip
+dist/
+build/
+
+# OS
+.DS_Store
+Thumbs.db

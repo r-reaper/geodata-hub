@@ -1,0 +1,17 @@
+{
+  "aoi": {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [[
+        [100.5, 13.7],
+        [100.6, 13.7],
+        [100.6, 13.8],
+        [100.5, 13.8],
+        [100.5, 13.7]
+      ]]
+    }
+  },
+  "layers": ["roads", "waterways"],
+  "formats": ["shp", "geojson"]
+}
