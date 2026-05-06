@@ -1,0 +1,336 @@
+"""
+Thai GeoData Hub — Clipping Service (File-based, no PostgreSQL required)
+Performs spatial intersection between user AOI and local GeoJSON layers.
+Outputs multi-format ZIP (Shapefile, GeoJSON, KML).
+"""
+
+import sys
+import io
+import json
+import math
+import tempfile
+import zipfile
+import logging
+import uuid
+import os
+from datetime import datetime
+from pathlib import Path
+from typing import Optional
+
+import geopandas as gpd
+import pandas as pd
+from shapely.geometry import mapping, shape
+from shapely.ops import unary_union
+
+# S3 storage integration — graceful degradation when boto3 unavailable
+S3_AVAILABLE = False
+upload_file_to_s3 = None
+delete_s3_object = None
+
+try:
+    import boto3
+    from botocore.config import Config
+    from botocore.exceptions import ClientError
+
+    sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
+    from s3_storage import upload_file_to_s3, delete_s3_object
+    S3_AVAILABLE = bool(os.getenv("S3_ACCESS_KEY", ""))
+except ImportError:
+    # boto3 not installed — S3 features disabled, use local file storage
+    pass
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+log = logging.getLogger(__name__)
+
+# ─────────────────────────────────────────────
+# Configuration
+# ─────────────────────────────────────────────
+DATA_DIR = Path(__file__).parent.parent / "data"
+
+LAYER_METADATA = {
+    "roads":     {"slug": "roads",     "name_en": "Road Network",            "name_th": "เส้นทางจราจร",        "geom_type": "Linestring"},
+    "waterways": {"slug": "waterways", "name_en": "Waterways",                "name_th": "แหล่งน้ำ",              "geom_type": "Linestring"},
+    "buildings": {"slug": "buildings", "name_en": "Buildings",                "name_th": "อาคาร/สิ่งปลูกสร้าง",   "geom_type": "Polygon"},
+    "province":  {"slug": "province",  "name_en": "Province Boundaries",     "name_th": "ขอบเขตจังหวัด",        "geom_type": "Polygon"},
+    "amphoe":    {"slug": "amphoe",    "name_en": "District Boundaries",     "name_th": "ขอบเขตอำเภอ",          "geom_type": "Polygon"},
+    "tambon":    {"slug": "tambon",    "name_en": "Sub-district Boundaries", "name_th": "ขอบเขตตำบล",           "geom_type": "Polygon"},
+}
+
+DRIVER_MAP = {
+    "shp": "ESRI Shapefile",
+    "geojson": "GeoJSON",
+    "kml": "KML",
+}
+
+
+# ─────────────────────────────────────────────
+# Core clipping logic
+# ─────────────────────────────────────────────
+
+def load_layer_from_file(slug: str) -> gpd.GeoDataFrame:
+    """Load a layer from local GeoJSON file."""
+    path = DATA_DIR / f"{slug}.geojson"
+    if not path.exists():
+        raise FileNotFoundError(f"No data file found for layer: {slug} (expected {path})")
+    gdf = gpd.read_file(path)
+    if gdf.empty:
+        return gdf
+    return gdf
+
+
+def load_metadata(slug: str) -> dict:
+    path = DATA_DIR / f"{slug}_metadata.json"
+    if path.exists():
+        return json.loads(path.read_text(encoding="utf-8"))
+    return LAYER_METADATA.get(slug, {})
+
+
+def clip_layer(gdf: gpd.GeoDataFrame, aoi_geom) -> gpd.GeoDataFrame:
+    """Perform spatial intersection between layer and AOI."""
+    if gdf.empty:
+        return gpd.GeoDataFrame(columns=gdf.columns, geometry="geometry", crs=gdf.crs)
+
+    # Use spatial index for performance
+    gdf_sindex = gdf.sindex
+    aoi_bounds = aoi_geom.bounds
+    candidate_idx = list(gdf_sindex.intersection(aoi_bounds))
+
+    if not candidate_idx:
+        return gpd.GeoDataFrame(columns=gdf.columns, geometry="geometry", crs=gdf.crs)
+
+    candidates = gdf.iloc[candidate_idx].copy()
+
+    # Filter to only those that actually intersect
+    clipped_geoms = []
+    clipped_rows = []
+    for _, row in candidates.iterrows():
+        try:
+            if row.geometry.intersects(aoi_geom):
+                inter = row.geometry.intersection(aoi_geom)
+                if not inter.is_empty:
+                    clipped_geoms.append(inter)
+                    clipped_rows.append(row.drop("geometry").drop("geom", errors="ignore"))
+        except Exception:
+            continue
+
+    if not clipped_rows:
+        return gpd.GeoDataFrame(columns=gdf.columns, geometry="geometry", crs=gdf.crs)
+
+    # Build result GeoDataFrame from clipped rows and clipped geometries
+    result = gpd.GeoDataFrame(clipped_rows, geometry=clipped_geoms, crs=gdf.crs or "EPSG:4326")
+    result.rename_geometry("geom", inplace=True)
+    return result
+
+
+def estimate_size_mb(gdf: gpd.GeoDataFrame, fmt: str) -> float:
+    if gdf.empty:
+        return 0.0
+    per_feature = {"shp": 2500, "geojson": 800, "kml": 1200}
+    return (len(gdf) * per_feature.get(fmt, 2000)) / (1024 * 1024)
+
+
+def gdf_to_bytes(gdf: gpd.GeoDataFrame, fmt: str, layer_name: str) -> bytes:
+    if fmt == "kml":
+        gdf_kml = gdf.copy()
+        name_col = next((c for c in ["name_en", "name_th", "name"] if c in gdf_kml.columns), None)
+        gdf_kml["Name"] = gdf_kml[name_col].fillna("") if name_col else ""
+        gdf_kml["Description"] = ""
+        with tempfile.NamedTemporaryFile(suffix=".kml", delete=False) as tmp:
+            gdf_kml.to_file(tmp.name, driver="KML", encoding="utf-8")
+            data = Path(tmp.name).read_bytes()
+        Path(tmp.name).unlink()
+        return data
+    elif fmt == "shp":
+        tmpdir = Path(tempfile.mkdtemp())
+        shp_path = tmpdir / f"{layer_name}.shp"
+        gdf.to_file(shp_path, driver="ESRI Shapefile", encoding="utf-8")
+        parts = {}
+        for sub_ext in ["shp", "shx", "dbf", "prj"]:
+            fpath = tmpdir / f"{layer_name}.{sub_ext}"
+            if fpath.exists():
+                parts[sub_ext] = fpath.read_bytes()
+        for fpath in tmpdir.glob(f"{layer_name}.*"):
+            fpath.unlink()
+        tmpdir.rmdir()
+        return parts
+    else:
+        buf = io.BytesIO()
+        gdf.to_file(buf, driver=DRIVER_MAP[fmt], encoding="utf-8")
+        buf.seek(0)
+        return buf.read()
+
+
+def create_download_zip(
+    gdf: gpd.GeoDataFrame,
+    layer_slug: str,
+    formats: list[str] = ("shp", "geojson", "kml"),
+) -> tuple[bytes, float]:
+    """Create ZIP with multiple format exports."""
+    if gdf.empty:
+        raise ValueError("No features to export after clipping")
+
+    zip_buf = io.BytesIO()
+    total_size_mb = 0.0
+    layer_name = layer_slug.replace("-", "_")
+
+    with zipfile.ZipFile(zip_buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for fmt in formats:
+            if fmt == "shp":
+                parts = gdf_to_bytes(gdf, fmt, layer_name)
+                for sub_ext, data in parts.items():
+                    zf.writestr(f"{layer_name}.{sub_ext}", data)
+                    total_size_mb += len(data) / (1024 * 1024)
+            else:
+                filename = f"{layer_name}.{fmt}"
+                data = gdf_to_bytes(gdf, fmt, layer_name)
+                zf.writestr(filename, data)
+                total_size_mb += len(data) / (1024 * 1024)
+
+    zip_buf.seek(0)
+    return zip_buf.read(), total_size_mb
+
+
+# ─────────────────────────────────────────────
+# ClipService — FastAPI integration
+# ─────────────────────────────────────────────
+
+class ClipService:
+
+    def get_available_layers(self) -> list[dict]:
+        layers = []
+        for slug in LAYER_METADATA:
+            meta = load_metadata(slug)
+            layers.append({
+                "slug": slug,
+                "name_en": meta.get("name_en", slug),
+                "name_th": meta.get("name_th", ""),
+                "geom_type": meta.get("geom_type", "Unknown"),
+                "feature_count": meta.get("feature_count", 0),
+                "status": "active" if (DATA_DIR / f"{slug}.geojson").exists() else "no_data",
+            })
+        return layers
+
+    def calculate_preview(self, aoi_geojson: dict, layer_slugs: list[str]) -> dict:
+        try:
+            aoi_geom = shape(aoi_geojson["geometry"])
+        except Exception as e:
+            raise ValueError(f"Invalid GeoJSON: {e}")
+
+        results = {}
+        for slug in layer_slugs:
+            try:
+                gdf = load_layer_from_file(slug)
+                clipped = clip_layer(gdf, aoi_geom)
+                results[slug] = {
+                    "feature_count": len(clipped),
+                    "estimated_mb_shp": round(estimate_size_mb(clipped, "shp"), 3),
+                    "estimated_mb_geojson": round(estimate_size_mb(clipped, "geojson"), 3),
+                    "centroid": mapping(clipped.geometry.centroid.unary_union).get("coordinates")
+                                if not clipped.empty else None,
+                }
+            except FileNotFoundError as e:
+                results[slug] = {"error": str(e)}
+            except Exception as e:
+                results[slug] = {"error": str(e)}
+        return results
+
+    def clip_and_package(
+        self,
+        aoi_geojson: dict,
+        layer_slugs: list[str],
+        formats: list[str] = ("shp", "geojson", "kml"),
+        user_id: Optional[str] = None,
+        use_credits: bool = False,
+    ) -> dict:
+        """Clip layers to AOI, upload ZIP to S3, return presigned URL."""
+        try:
+            aoi_geom = shape(aoi_geojson["geometry"])
+        except Exception as e:
+            raise ValueError(f"Invalid AOI geometry: {e}")
+
+        if aoi_geom.area > 100:
+            raise ValueError("AOI too large. Please draw a smaller area.")
+
+        total_features = 0
+        zip_parts = []
+
+        for slug in layer_slugs:
+            try:
+                gdf = load_layer_from_file(slug)
+                clipped = clip_layer(gdf, aoi_geom)
+                if clipped.empty:
+                    continue
+                total_features += len(clipped)
+                zip_parts.append((clipped, slug))
+            except FileNotFoundError:
+                continue
+
+        if not zip_parts:
+            raise ValueError("No data found for selected layers. Run osm_fetcher.py first.")
+
+        download_id = uuid.uuid4().hex
+        zip_path = Path(tempfile.gettempdir()) / f"{download_id}.zip"
+        total_size_mb = 0.0
+
+        with zipfile.ZipFile(str(zip_path), "w", zipfile.ZIP_DEFLATED) as zf:
+            for gdf, slug in zip_parts:
+                layer_name = slug.replace("-", "_")
+                for fmt in formats:
+                    if fmt == "shp":
+                        parts = gdf_to_bytes(gdf, fmt, layer_name)
+                        for sub_ext, data in parts.items():
+                            zf.writestr(f"{layer_name}.{sub_ext}", data)
+                            total_size_mb += len(data) / (1024 * 1024)
+                    else:
+                        filename = f"{layer_name}.{fmt}"
+                        data = gdf_to_bytes(gdf, fmt, layer_name)
+                        zf.writestr(filename, data)
+                        total_size_mb += len(data) / (1024 * 1024)
+
+        # ── Upload to S3 ──
+        object_key = f"downloads/{download_id}.zip"
+        presigned_url = None
+        local_cleanup_needed = True
+
+        if S3_AVAILABLE and upload_file_to_s3:
+            presigned_url = upload_file_to_s3(str(zip_path), object_key)
+            if presigned_url:
+                local_cleanup_needed = True
+                log.info(f"Uploaded ZIP to S3: {object_key}")
+            else:
+                log.warning("S3 upload failed — falling back to local file serve")
+
+        return {
+            "download_id": download_id,
+            "filename": f"thai_geodata_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip",
+            "size_mb": round(total_size_mb, 3),
+            "total_features": total_features,
+            "layers_included": layer_slugs,
+            "formats_included": formats,
+            # S3 fields
+            "presigned_url": presigned_url,
+            "s3_key": object_key if presigned_url else None,
+            "expires_in_seconds": 900,  # 15 minutes
+            "local_cleanup_needed": local_cleanup_needed,
+            # Fallback: local path if S3 unavailable
+            "local_zip_path": str(zip_path) if not presigned_url else None,
+        }
+
+
+# ─────────────────────────────────────────────
+# CLI
+# ─────────────────────────────────────────────
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Clip & Package Thai GeoData")
+    parser.add_argument("--aoi", required=True, help="GeoJSON file path")
+    parser.add_argument("--layers", nargs="+", required=True, choices=list(LAYER_METADATA.keys()))
+    parser.add_argument("--formats", nargs="+", default=["shp", "geojson", "kml"])
+    args = parser.parse_args()
+
+    aoi_geojson = json.loads(Path(args.aoi).read_text(encoding="utf-8"))
+    svc = ClipService()
+    result = svc.clip_and_package(aoi_geojson, args.layers, args.formats)
+    print(json.dumps(result, indent=2))

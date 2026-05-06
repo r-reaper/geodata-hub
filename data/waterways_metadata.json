@@ -1,0 +1,14 @@
+{
+  "slug": "waterways",
+  "feature_count": 74306,
+  "bbox": [
+    97.1570741,
+    6.1562336,
+    106.0440675,
+    20.7463811
+  ],
+  "last_refreshed": "2026-05-05T01:16:39.251672",
+  "name_en": "Waterways",
+  "name_th": "แหล่งน้ำ",
+  "geom_type": "Linestring"
+}

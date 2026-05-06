@@ -1,0 +1,86 @@
+-- Thai GeoData Hub — SQLite/SpatiaLite Schema
+-- For demo/local development without PostgreSQL
+-- Uses GeoPandas + local GeoJSON files as data store
+-- See README for PostgreSQL/PostGIS setup when ready
+
+-- This file is kept as documentation of the expected schema.
+-- In file-based mode, data is stored as:
+--   data/{layer_slug}.geojson
+--   data/{layer_slug}_metadata.json
+
+-- ══════════════════════════════════════════════════════
+-- PostgreSQL Production Schema (when PostGIS is available):
+-- ══════════════════════════════════════════════════════
+--
+-- CREATE EXTENSION IF NOT EXISTS postgis;
+--
+-- CREATE TABLE spatial_layers (
+--     id SERIAL PRIMARY KEY,
+--     slug VARCHAR(50) UNIQUE NOT NULL,
+--     name_en VARCHAR(100),
+--     name_th VARCHAR(100),
+--     geom_type VARCHAR(20),
+--     feature_count INTEGER DEFAULT 0,
+--     total_size_mb REAL DEFAULT 0,
+--     source VARCHAR(50) DEFAULT 'osm',
+--     status VARCHAR(20) DEFAULT 'active',
+--     bbox_minx REAL, bbox_miny REAL, bbox_maxx REAL, bbox_maxy REAL,
+--     last_refreshed TIMESTAMP DEFAULT NOW()
+-- );
+--
+-- CREATE TABLE thailand_province (
+--     id SERIAL PRIMARY KEY, osm_id BIGINT, name_en VARCHAR(100), name_th VARCHAR(100),
+--     admin_level INT, geom_type VARCHAR(20), geom GEOMETRY(Geometry, 4326)
+-- );
+--
+-- CREATE TABLE thailand_amphoe (
+--     id SERIAL PRIMARY KEY, osm_id BIGINT, name_en VARCHAR(100), name_th VARCHAR(100),
+--     province_code INT, geom_type VARCHAR(20), geom GEOMETRY(Geometry, 4326)
+-- );
+--
+-- CREATE TABLE thailand_tambon (
+--     id SERIAL PRIMARY KEY, osm_id BIGINT, name_en VARCHAR(100), name_th VARCHAR(100),
+--     amphoe_code INT, province_code INT, geom_type VARCHAR(20), geom GEOMETRY(Geometry, 4326)
+-- );
+--
+-- CREATE TABLE osm_roads (
+--     id SERIAL PRIMARY KEY, osm_id BIGINT, osm_type VARCHAR(10), name_en VARCHAR(200),
+--     name_th VARCHAR(200), road_class VARCHAR(30), road_ref VARCHAR(50),
+--     oneway BOOLEAN, surface VARCHAR(30), length_km REAL, geom GEOMETRY(LineString, 4326)
+-- );
+--
+-- CREATE TABLE osm_waterways (
+--     id SERIAL PRIMARY KEY, osm_id BIGINT, osm_type VARCHAR(10), name_en VARCHAR(200),
+--     name_th VARCHAR(200), water_type VARCHAR(30), width_m REAL, length_km REAL,
+--     geom GEOMETRY(LineString, 4326)
+-- );
+--
+-- CREATE TABLE osm_buildings (
+--     id SERIAL PRIMARY KEY, osm_id BIGINT, osm_type VARCHAR(10), name_en VARCHAR(200),
+--     name_th VARCHAR(200), building_type VARCHAR(50), levels INT, height_m REAL,
+--     geom GEOMETRY(Polygon, 4326)
+-- );
+--
+-- CREATE TABLE user_credits (
+--     user_id VARCHAR(100) PRIMARY KEY, credits INT DEFAULT 0,
+--     plan VARCHAR(20) DEFAULT 'free', updated_at TIMESTAMP DEFAULT NOW()
+-- );
+--
+-- CREATE TABLE download_logs (
+--     id SERIAL PRIMARY KEY, user_id VARCHAR(100), layer_slug VARCHAR(50),
+--     file_format VARCHAR(20), feature_count INT, file_size_mb REAL,
+--     credits_used INT DEFAULT 0, aoi_geom GEOMETRY(Geometry, 4326), created_at TIMESTAMP DEFAULT NOW()
+-- );
+--
+-- CREATE TABLE refresh_logs (
+--     id SERIAL PRIMARY KEY, layer_slug VARCHAR(50), status VARCHAR(20),
+--     features_before INT, features_after INT, error_msg TEXT, finished_at TIMESTAMP
+-- );
+--
+-- CREATE INDEX idx_roads_class ON osm_roads(road_class);
+-- CREATE INDEX idx_roads_geom ON osm_roads USING GIST(geom);
+-- CREATE INDEX idx_waterways_geom ON osm_waterways USING GIST(geom);
+-- CREATE INDEX idx_buildings_geom ON osm_buildings USING GIST(geom);
+-- CREATE INDEX idx_province_geom ON thailand_province USING GIST(geom);
+-- CREATE INDEX idx_amphoe_geom ON thailand_amphoe USING GIST(geom);
+-- CREATE INDEX idx_tambon_geom ON thailand_tambon USING GIST(geom);

@@ -1,0 +1,33 @@
+# Thai GeoData Hub — Python dependencies
+
+# Core
+fastapi==0.110.0
+uvicorn[standard]==0.29.0
+pydantic==2.7.0
+
+# Database
+psycopg2-binary==2.9.9
+sqlalchemy==2.0.29
+geoalchemy2==0.14.3
+shapely==2.0.4
+
+# Data processing
+geopandas==0.14.4
+pandas==2.2.2
+fiona==1.9.6
+pyproj==3.6.1
+numpy==1.26.4
+
+# HTTP & API
+httpx==0.27.0
+requests==2.31.0
+python-multipart==0.0.9
+
+# S3 storage
+boto3==1.34.114
+
+# Payments
+stripe==8.10.0
+
+# Utilities
+python-dotenv==1.0.1
