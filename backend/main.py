@@ -411,15 +411,52 @@ def refresh_layer_background(layer_slug: str):
         log.error(f"Refresh failed for {layer_slug}: {e}")
 
 
-if __name__ == "__main__":
-    import uvicorn
+def _sync_data_from_r2():
+    """
+    On startup: download any missing GeoJSON layer files from R2.
+    This lets Railway run without the data in the git repo.
+    """
+    if not S3_AVAILABLE:
+        log.info("S3 not configured — skipping data sync")
+        return
 
-    # Ensure S3 bucket exists on startup
+    try:
+        from s3_storage import download_file_from_s3
+    except ImportError:
+        return
+
+    data_dir = Path(__file__).parent.parent / "data"
+    data_dir.mkdir(exist_ok=True)
+
+    layers = ["waterways", "roads", "province", "amphoe", "tambon", "buildings"]
+    for slug in layers:
+        local = data_dir / f"{slug}.geojson"
+        if local.exists():
+            log.info(f"Data OK (local): {slug}.geojson")
+            continue
+        log.info(f"Downloading {slug}.geojson from R2 ...")
+        ok = download_file_from_s3(f"data/{slug}.geojson", str(local))
+        if ok:
+            log.info(f"Downloaded {slug}.geojson")
+        else:
+            log.warning(f"Could not download {slug}.geojson — layer will be unavailable")
+
+
+@app.on_event("startup")
+async def startup_event():
+    import asyncio
+    # Run data sync in a thread so we don't block the event loop
+    loop = asyncio.get_event_loop()
+    await loop.run_in_executor(None, _sync_data_from_r2)
+    # Ensure S3 bucket exists
     if S3_AVAILABLE:
         try:
             from s3_storage import ensure_bucket_exists
             ensure_bucket_exists()
         except Exception as e:
-            log.warning(f"S3 bucket check failed on startup: {e}")
+            log.warning(f"S3 bucket check failed: {e}")
 
+
+if __name__ == "__main__":
+    import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
