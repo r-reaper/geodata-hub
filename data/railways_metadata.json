@@ -1,0 +1,14 @@
+{
+  "slug": "railways",
+  "feature_count": 7210,
+  "bbox": [
+    97.2817882,
+    6.4496774,
+    105.7161071,
+    20.5038596
+  ],
+  "last_refreshed": "2026-05-07T22:49:23.958880",
+  "name_en": "Railways",
+  "name_th": "ทางรถไฟ",
+  "geom_type": "Linestring"
+}

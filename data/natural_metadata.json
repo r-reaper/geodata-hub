@@ -1,0 +1,14 @@
+{
+  "slug": "natural",
+  "feature_count": 150036,
+  "bbox": [
+    97.0362281,
+    6.231732,
+    106.4598749,
+    20.8066893
+  ],
+  "last_refreshed": "2026-05-07T22:55:17.640999",
+  "name_en": "Natural Features",
+  "name_th": "ลักษณะทางธรรมชาติ",
+  "geom_type": "Polygon"
+}

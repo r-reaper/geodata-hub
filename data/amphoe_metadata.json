@@ -1,0 +1,14 @@
+{
+  "slug": "amphoe",
+  "feature_count": 1773,
+  "bbox": [
+    96.8197801,
+    5.9576845,
+    106.4259802,
+    22.0734004
+  ],
+  "last_refreshed": "2026-05-07T22:46:59.058684",
+  "name_en": "District Boundaries",
+  "name_th": "ขอบเขตอำเภอ",
+  "geom_type": "Polygon"
+}

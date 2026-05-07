@@ -90,7 +90,11 @@ OVERPASS_QUERIES = {
     """,
     "buildings": f"""
     [out:json][timeout:{TIMEOUT}];
-    (way["building"]({thai_bbox_str()}););
+    (
+      way["building"~"hotel|hospital|school|university|commercial|retail|office|government|public|train_station|transportation|stadium|sports_hall|church|mosque|temple|shrine|cathedral|chapel|religious|civic|library|museum"]({thai_bbox_str()});
+      way["building"]["name"]({thai_bbox_str()});
+      way["building"]["building:levels"~"[3-9]|[1-9][0-9]"]({thai_bbox_str()});
+    );
     out body geom;
     """,
     "landuse": f"""

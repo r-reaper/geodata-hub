@@ -1,0 +1,14 @@
+{
+  "slug": "tambon",
+  "feature_count": 801,
+  "bbox": [
+    98.2580375,
+    7.7577323,
+    105.8056519,
+    20.361905
+  ],
+  "last_refreshed": "2026-05-07T22:47:33.710729",
+  "name_en": "Sub-district Boundaries",
+  "name_th": "ขอบเขตตำบล",
+  "geom_type": "Polygon"
+}

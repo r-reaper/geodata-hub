@@ -1,0 +1,14 @@
+{
+  "slug": "pois",
+  "feature_count": 59672,
+  "bbox": [
+    97.3002342,
+    6.5016517,
+    105.6992542,
+    20.4986418
+  ],
+  "last_refreshed": "2026-05-07T22:48:59.783208",
+  "name_en": "Points of Interest",
+  "name_th": "สถานที่สำคัญ",
+  "geom_type": "Point"
+}

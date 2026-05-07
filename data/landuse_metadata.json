@@ -1,0 +1,14 @@
+{
+  "slug": "landuse",
+  "feature_count": 112480,
+  "bbox": [
+    97.2907457,
+    6.4589141,
+    105.758134,
+    20.5212879
+  ],
+  "last_refreshed": "2026-05-07T22:56:23.837373",
+  "name_en": "Land Use",
+  "name_th": "การใช้ประโยชน์ที่ดิน",
+  "geom_type": "Polygon"
+}
