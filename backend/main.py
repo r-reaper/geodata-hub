@@ -55,13 +55,12 @@ app = FastAPI(
     description="Browse, preview, and clip-download Thai spatial data with S3 + Stripe",
 )
 
-_raw_origins = os.getenv("ALLOWED_ORIGINS", "*")
-_allowed_origins = [o.strip() for o in _raw_origins.split(",")] if _raw_origins != "*" else ["*"]
-
+# NOTE: allow_credentials=True is incompatible with allow_origins=["*"] in Starlette 0.27+
+# Our API uses no cookies / HTTP-auth, so credentials are not needed.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=_allowed_origins,
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
