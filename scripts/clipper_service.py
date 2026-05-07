@@ -50,7 +50,11 @@ DATA_DIR = Path(__file__).parent.parent / "data"
 LAYER_METADATA = {
     "roads":     {"slug": "roads",     "name_en": "Road Network",            "name_th": "เส้นทางจราจร",        "geom_type": "Linestring"},
     "waterways": {"slug": "waterways", "name_en": "Waterways",                "name_th": "แหล่งน้ำ",              "geom_type": "Linestring"},
+    "railways":  {"slug": "railways",  "name_en": "Railways",                 "name_th": "ทางรถไฟ",              "geom_type": "Linestring"},
     "buildings": {"slug": "buildings", "name_en": "Buildings",                "name_th": "อาคาร/สิ่งปลูกสร้าง",   "geom_type": "Polygon"},
+    "landuse":   {"slug": "landuse",   "name_en": "Land Use",                 "name_th": "การใช้ประโยชน์ที่ดิน",   "geom_type": "Polygon"},
+    "natural":   {"slug": "natural",   "name_en": "Natural Features",         "name_th": "ลักษณะทางธรรมชาติ",    "geom_type": "Polygon"},
+    "pois":      {"slug": "pois",      "name_en": "Points of Interest",       "name_th": "สถานที่สำคัญ",          "geom_type": "Point"},
     "province":  {"slug": "province",  "name_en": "Province Boundaries",     "name_th": "ขอบเขตจังหวัด",        "geom_type": "Polygon"},
     "amphoe":    {"slug": "amphoe",    "name_en": "District Boundaries",     "name_th": "ขอบเขตอำเภอ",          "geom_type": "Polygon"},
     "tambon":    {"slug": "tambon",    "name_en": "Sub-district Boundaries", "name_th": "ขอบเขตตำบล",           "geom_type": "Polygon"},
