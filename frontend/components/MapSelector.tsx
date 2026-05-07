@@ -130,6 +130,7 @@ export default function MapSelector() {
 
   // ── State
   const [mapReady, setMapReady] = useState(false);
+  const [mapError, setMapError] = useState<string | null>(null);
   const [apiOk, setApiOk] = useState<boolean | null>(null);
   const [aoi, setAoi] = useState<AOIFeature | null>(null);
   const [isDrawing, setIsDrawing] = useState(false);
@@ -204,6 +205,29 @@ export default function MapSelector() {
     });
     map.addControl(new mapboxgl.NavigationControl(), "top-right");
     map.addControl(new mapboxgl.ScaleControl(), "bottom-left");
+
+    // ── Surface Mapbox errors (token restrictions, network issues, etc.)
+    map.on("error", (e: any) => {
+      const err = e?.error;
+      const status = err?.status;
+      const msg = err?.message || "Unknown Mapbox error";
+      // 401/403: token issue (expired, invalid, or URL-restricted)
+      if (status === 401 || status === 403 || /forbidden|unauthorized|access token/i.test(msg)) {
+        setMapError(`Mapbox token rejected (${status || "auth"}): ${msg}. The token is likely URL-restricted — add ${window.location.origin} to allowed URLs in Mapbox account settings, OR remove URL restrictions on the token.`);
+      } else if (!mapReady) {
+        // Errors before initial load are usually fatal
+        setMapError(`Map failed to load: ${msg}`);
+      }
+      // eslint-disable-next-line no-console
+      console.error("[Mapbox]", e);
+    });
+
+    // ── Force resize on container/window changes (defends against flex-layout race)
+    const resize = () => map.resize();
+    const ro = new ResizeObserver(resize);
+    if (mapContainer.current) ro.observe(mapContainer.current);
+    window.addEventListener("resize", resize);
+    setTimeout(resize, 100);
 
     // ── Drawing state
     const drawing = {
@@ -289,7 +313,12 @@ export default function MapSelector() {
     });
 
     mapRef.current = map;
-    return () => { map.remove(); mapRef.current = null; };
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", resize);
+      map.remove();
+      mapRef.current = null;
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -750,11 +779,30 @@ export default function MapSelector() {
         {/* ── Map ── */}
         <main className="flex-1 relative">
           <div ref={mapContainer} className="absolute inset-0" />
-          {!mapReady && (
+          {!mapReady && !mapError && (
             <div className="absolute inset-0 flex items-center justify-center bg-slate-100/80 backdrop-blur-sm z-10">
               <div className="text-center">
                 <div className="text-4xl animate-pulse">🌏</div>
                 <p className="text-sm text-slate-600 mt-2">Loading map…</p>
+              </div>
+            </div>
+          )}
+
+          {mapError && (
+            <div className="absolute inset-0 flex items-center justify-center bg-white/95 z-10 p-6">
+              <div className="max-w-lg bg-red-50 border border-red-200 rounded-xl p-6 shadow-lg">
+                <div className="text-3xl mb-2">⚠️</div>
+                <h3 className="font-bold text-red-900 mb-2">Map failed to load</h3>
+                <p className="text-sm text-red-800 mb-4 break-words">{mapError}</p>
+                <details className="text-xs text-red-700">
+                  <summary className="cursor-pointer font-medium mb-1">How to fix</summary>
+                  <ol className="list-decimal list-inside space-y-1 mt-2 text-slate-700">
+                    <li>Open <a href="https://account.mapbox.com/access-tokens/" target="_blank" rel="noopener noreferrer" className="underline text-blue-600">account.mapbox.com/access-tokens</a></li>
+                    <li>Click your token (the <code>pk.…</code> one)</li>
+                    <li>Either remove all URL restrictions, OR add <code className="bg-white px-1 rounded">{typeof window !== "undefined" ? window.location.origin : "your-domain"}</code> to allowed URLs</li>
+                    <li>Save and refresh this page</li>
+                  </ol>
+                </details>
               </div>
             </div>
           )}
