@@ -546,8 +546,8 @@ def _sync_data_from_r2():
     data_dir = Path(__file__).parent.parent / "data"
     data_dir.mkdir(exist_ok=True)
 
-    layers = ["waterways", "roads", "province", "amphoe", "tambon", "buildings",
-              "landuse", "natural", "pois", "railways"]
+    layers = ["province", "amphoe", "tambon", "roads", "waterways", "railways",
+              "buildings", "landuse", "natural", "parks", "temples", "pois"]
     for slug in layers:
         local = data_dir / f"{slug}.geojson"
         if local.exists():
