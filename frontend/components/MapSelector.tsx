@@ -428,7 +428,9 @@ export default function MapSelector() {
     setLoadingPreviewSlug(slug);
     try {
       const bounds = map.getBounds();
-      const bbox = `${bounds.getWest()},${bounds.getSouth()},${bounds.getEast()},${bounds.getNorth()}`;
+      const bbox = bounds
+        ? `${bounds.getWest()},${bounds.getSouth()},${bounds.getEast()},${bounds.getNorth()}`
+        : "";
       const resp = await fetch(`${API_BASE}/layer-sample/${slug}?bbox=${bbox}&limit=200`);
       if (!resp.ok) return;
       const geojson = await resp.json();
