@@ -1,0 +1,14 @@
+{
+  "slug": "buildings",
+  "feature_count": 81012,
+  "bbox": [
+    97.3012573,
+    6.5046491,
+    105.6991557,
+    20.4782898
+  ],
+  "last_refreshed": "2026-05-07T23:13:21.009726",
+  "name_en": "Buildings",
+  "name_th": "อาคาร/สิ่งปลูกสร้าง",
+  "geom_type": "Polygon"
+}

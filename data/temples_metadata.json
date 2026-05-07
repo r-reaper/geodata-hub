@@ -1,0 +1,14 @@
+{
+  "slug": "temples",
+  "feature_count": 16857,
+  "bbox": [
+    97.3006373,
+    6.5207499,
+    105.6955415,
+    20.496598
+  ],
+  "last_refreshed": "2026-05-07T22:47:53.059264",
+  "name_en": "Temples & Shrines",
+  "name_th": "วัด/ศาสนสถาน",
+  "geom_type": "Point"
+}

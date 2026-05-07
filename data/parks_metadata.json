@@ -1,0 +1,14 @@
+{
+  "slug": "parks",
+  "feature_count": 320,
+  "bbox": [
+    97.3438072,
+    6.3530468,
+    106.2956457,
+    20.8262665
+  ],
+  "last_refreshed": "2026-05-07T22:50:09.760387",
+  "name_en": "National Parks",
+  "name_th": "อุทยานแห่งชาติ",
+  "geom_type": "Polygon"
+}
