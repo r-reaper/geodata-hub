@@ -300,21 +300,37 @@ export default function MapSelector() {
   }, []);
 
   // ─────────────────────────────────────────────
-  // API health check on mount
+  // API health check on mount (with retry for Railway cold-start)
   // ─────────────────────────────────────────────
 
   useEffect(() => {
+    let cancelled = false;
     const check = async () => {
-      try {
-        const r = await fetch(`${API_BASE}/health`, { signal: AbortSignal.timeout(8000) });
-        setApiOk(r.ok);
-        if (!r.ok) addToast("Backend unreachable — set NEXT_PUBLIC_API_URL in Vercel", "error");
-      } catch {
-        setApiOk(false);
-        addToast("Cannot reach backend. Check NEXT_PUBLIC_API_URL env var.", "error");
+      // Retry up to 3 times — Railway can take 20–30 s on cold start
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          const r = await fetch(`${API_BASE}/health`, { signal: AbortSignal.timeout(20000) });
+          if (cancelled) return;
+          setApiOk(r.ok);
+          if (r.ok) return; // success — stop retrying
+        } catch {
+          if (cancelled) return;
+          if (attempt < 3) {
+            await new Promise((res) => setTimeout(res, 5000)); // wait 5 s then retry
+          } else {
+            setApiOk(false);
+            addToast(
+              API_BASE.includes("localhost")
+                ? "Backend is localhost — set NEXT_PUBLIC_API_URL in Vercel and redeploy"
+                : "Backend waking up… refresh in 30 s if layers don't load",
+              "error"
+            );
+          }
+        }
       }
     };
     check();
+    return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -458,7 +474,7 @@ export default function MapSelector() {
         ? `bbox=${bounds.getWest()},${bounds.getSouth()},${bounds.getEast()},${bounds.getNorth()}&`
         : "";
       const resp = await fetch(`${API_BASE}/layer-sample/${slug}?${bboxParam}limit=300`, {
-        signal: AbortSignal.timeout(15000),
+        signal: AbortSignal.timeout(30000),
       });
       if (!resp.ok) {
         const detail = await resp.json().then((d) => d.detail).catch(() => resp.statusText);
@@ -645,7 +661,7 @@ export default function MapSelector() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ aoi, layers: selectedLayers, formats: selectedFormats }),
-        signal: AbortSignal.timeout(30000),
+        signal: AbortSignal.timeout(60000),
       });
       if (!r.ok) throw new Error((await r.json()).detail || `HTTP ${r.status}`);
       const d = await r.json();
