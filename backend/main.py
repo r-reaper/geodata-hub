@@ -4,6 +4,7 @@ Thai GeoData Hub — FastAPI Backend (v2 with S3 + Stripe)
 
 import os
 import sys
+import json
 import tempfile
 import logging
 from pathlib import Path
@@ -16,6 +17,9 @@ from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+
+# Download history
+from history import save_download, get_user_history, get_download_record
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
 from clipper_service import ClipService, LAYER_METADATA
@@ -229,6 +233,23 @@ def clip_data(request: ClipDataRequest, background_tasks: BackgroundTasks):
     if local_path and result.get("presigned_url"):
         background_tasks.add_task(cleanup_local_file, local_path)
 
+    # ── Save to download history ──
+    if user_id:
+        try:
+            save_download(
+                user_id=user_id,
+                download_id=result["download_id"],
+                filename=result["filename"],
+                layers=request.layers,
+                formats=request.formats,
+                size_mb=result["size_mb"],
+                total_features=result["total_features"],
+                s3_key=result.get("s3_key"),
+                credits_used=credits_needed,
+            )
+        except Exception as e:
+            log.warning(f"Failed to save download history: {e}")
+
     # ── Return presigned URL or fallback ──
     if result.get("presigned_url"):
         return {
@@ -374,6 +395,103 @@ def _search_location_demo(q: str):
     return {"results": results, "query": q, "mode": "demo"}
 
 
+@app.get("/history/{user_id}")
+def get_history(user_id: str):
+    """Return the download history for a user (most recent first)."""
+    records = get_user_history(user_id)
+    return {"user_id": user_id, "downloads": records, "count": len(records)}
+
+
+class RedownloadRequest(BaseModel):
+    user_id: str
+    download_id: str
+
+
+@app.post("/redownload")
+def redownload(req: RedownloadRequest):
+    """
+    Re-generate a presigned S3 URL for a previous download.
+    No credits charged — user already paid.
+    """
+    record = get_download_record(req.user_id, req.download_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Download record not found")
+
+    s3_key = record.get("s3_key")
+    if not s3_key:
+        raise HTTPException(
+            status_code=410,
+            detail="This download was not stored on S3 and is no longer available."
+        )
+
+    if not S3_AVAILABLE:
+        raise HTTPException(status_code=503, detail="S3 storage is not configured")
+
+    try:
+        from s3_storage import get_s3_client, S3_BUCKET_NAME
+        client = get_s3_client()
+        presigned_url = client.generate_presigned_url(
+            "get_object",
+            Params={"Bucket": S3_BUCKET_NAME, "Key": s3_key},
+            ExpiresIn=900,  # 15 minutes
+        )
+        return {
+            "download_id": req.download_id,
+            "presigned_url": presigned_url,
+            "filename": record.get("filename"),
+            "expires_in_seconds": 900,
+        }
+    except Exception as e:
+        log.error(f"Redownload presign failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to generate download link")
+
+
+@app.get("/layer-sample/{slug}")
+def layer_sample(slug: str, bbox: Optional[str] = None, limit: int = 200):
+    """
+    Return a GeoJSON sample of a layer for map preview.
+    Accepts optional bbox=west,south,east,north for viewport-filtered results.
+    Max `limit` features returned (default 200).
+    """
+    if slug not in LAYER_METADATA:
+        raise HTTPException(status_code=404, detail=f"Layer '{slug}' not found")
+
+    data_file = Path(__file__).parent.parent / "data" / f"{slug}.geojson"
+    if not data_file.exists():
+        raise HTTPException(
+            status_code=404,
+            detail=f"No data available for layer '{slug}'. Run osm_fetcher.py first."
+        )
+
+    try:
+        import geopandas as gpd
+
+        read_kwargs: dict = {}
+        if bbox:
+            try:
+                parts = [float(x) for x in bbox.split(",")]
+                if len(parts) == 4:
+                    # gpd/Fiona bbox = (west, south, east, north)
+                    read_kwargs["bbox"] = tuple(parts)
+            except Exception:
+                pass
+
+        gdf = gpd.read_file(data_file, **read_kwargs)
+
+        if gdf.empty:
+            return {"type": "FeatureCollection", "features": []}
+
+        # Sample if too many
+        if len(gdf) > limit:
+            gdf = gdf.sample(n=limit, random_state=42)
+
+        return json.loads(gdf.to_json())
+
+    except Exception as e:
+        log.error(f"layer-sample failed for {slug}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/admin/refresh/{layer_slug}")
 def trigger_refresh(layer_slug: str, background_tasks: BackgroundTasks):
     if layer_slug not in LAYER_METADATA:
@@ -428,7 +546,8 @@ def _sync_data_from_r2():
     data_dir = Path(__file__).parent.parent / "data"
     data_dir.mkdir(exist_ok=True)
 
-    layers = ["waterways", "roads", "province", "amphoe", "tambon", "buildings"]
+    layers = ["waterways", "roads", "province", "amphoe", "tambon", "buildings",
+              "landuse", "natural", "pois", "railways"]
     for slug in layers:
         local = data_dir / f"{slug}.geojson"
         if local.exists():
