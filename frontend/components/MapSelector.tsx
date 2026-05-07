@@ -542,9 +542,22 @@ export default function MapSelector() {
   // Render — main UI
   // ─────────────────────────────────────────────
   return (
-    <div className="flex flex-col h-screen bg-slate-50">
+    <div
+      style={{
+        display: "grid",
+        gridTemplateRows: "56px 1fr",
+        gridTemplateColumns: "360px 1fr",
+        gridTemplateAreas: '"header header" "side map"',
+        height: "100vh",
+        width: "100vw",
+        background: "#f8fafc",
+        overflow: "hidden",
+      }}
+    >
       {/* Top bar */}
-      <header className="h-14 bg-white border-b border-slate-200 px-5 flex items-center justify-between shadow-sm z-20">
+      <header
+        style={{ gridArea: "header" }}
+        className="bg-white border-b border-slate-200 px-5 flex items-center justify-between shadow-sm z-20">
         <div className="flex items-center gap-3">
           <span className="text-2xl">🇹🇭</span>
           <div>
@@ -569,10 +582,10 @@ export default function MapSelector() {
         </div>
       </header>
 
-      {/* Body */}
-      <div className="flex flex-1 min-h-0">
-        {/* ── Side panel ── */}
-        <aside className="w-[360px] bg-white border-r border-slate-200 overflow-y-auto flex flex-col">
+      {/* ── Side panel ── */}
+      <aside
+        style={{ gridArea: "side", overflowY: "auto" }}
+        className="bg-white border-r border-slate-200 flex flex-col">
           {/* STEP 1 — Search / navigate */}
           <Section step={1} title="Find your area" done={!!aoi}>
             <div className="relative">
@@ -777,8 +790,11 @@ export default function MapSelector() {
         </aside>
 
         {/* ── Map ── */}
-        <main className="flex-1 relative">
-          <div ref={mapContainer} className="absolute inset-0" />
+        <main style={{ gridArea: "map", position: "relative", overflow: "hidden" }}>
+          <div
+            ref={mapContainer}
+            style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, width: "100%", height: "100%" }}
+          />
           {!mapReady && !mapError && (
             <div className="absolute inset-0 flex items-center justify-center bg-slate-100/80 backdrop-blur-sm z-10">
               <div className="text-center">
@@ -807,6 +823,11 @@ export default function MapSelector() {
             </div>
           )}
 
+          {/* Tiny diagnostic badge — bottom-right, helpful while debugging */}
+          <div className="absolute bottom-2 right-2 bg-black/60 text-white text-[10px] px-2 py-1 rounded font-mono z-10">
+            {mapError ? "ERROR" : mapReady ? "✓ map ready" : "loading…"} · token: {MAPBOX_TOKEN ? `${MAPBOX_TOKEN.slice(0,10)}…` : "MISSING"}
+          </div>
+
           {/* Floating tip when no AOI */}
           {mapReady && !aoi && !isDrawing && (
             <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-white rounded-full shadow-lg border border-slate-200 px-4 py-2 text-sm text-slate-700 flex items-center gap-2">
@@ -821,7 +842,6 @@ export default function MapSelector() {
             </div>
           )}
         </main>
-      </div>
 
       {/* Toast */}
       {toast && (
