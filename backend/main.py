@@ -499,6 +499,23 @@ def trigger_refresh(layer_slug: str, background_tasks: BackgroundTasks):
     return {"message": f"Refresh for '{layer_slug}' queued", "status": "queued"}
 
 
+@app.get("/admin/sync-from-r2")
+def trigger_r2_sync(background_tasks: BackgroundTasks):
+    """
+    Re-run the R2 data sync in the background.
+    Downloads any missing layer GeoJSON files from R2.
+    """
+    def _do_sync():
+        log.info("Manual R2 sync triggered via /admin/sync-from-r2")
+        _sync_data_from_r2()
+        data_dir = Path(__file__).parent.parent / "data"
+        layers = [p.stem for p in data_dir.glob("*.geojson")]
+        log.info(f"R2 sync complete — {len(layers)} layers now available: {sorted(layers)}")
+
+    background_tasks.add_task(_do_sync)
+    return {"message": "R2 sync started in background", "status": "queued"}
+
+
 # ─────────────────────────────────────────────
 # Background tasks
 # ─────────────────────────────────────────────
