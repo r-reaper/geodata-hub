@@ -780,9 +780,17 @@ export default function MapSelector() {
 
         {/* API status pill */}
         {apiOk === false && (
-          <div className="hidden sm:flex items-center gap-1.5 bg-red-900/60 text-red-300 text-xs px-3 py-1 rounded-full border border-red-700">
-            <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
-            Backend unreachable — set NEXT_PUBLIC_API_URL in Vercel
+          <div className="hidden sm:flex items-center gap-1.5 bg-red-900/60 text-red-300 text-xs px-3 py-1 rounded-full border border-red-700 max-w-xs truncate">
+            <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse shrink-0" />
+            {API_BASE.includes("localhost")
+              ? "API = localhost — add NEXT_PUBLIC_API_URL in Vercel & redeploy"
+              : `Backend unreachable (${API_BASE.replace("https://", "")})`}
+          </div>
+        )}
+        {apiOk === null && (
+          <div className="hidden sm:flex items-center gap-1.5 text-slate-400 text-xs">
+            <span className="w-1.5 h-1.5 rounded-full bg-slate-500 animate-pulse" />
+            Connecting…
           </div>
         )}
 
