@@ -1,5 +1,6 @@
-// Thai GeoData Hub — MapSelector Component v3
-// Features: S3 + Stripe + Credits + Layer Map Preview + Download History
+// Thai GeoData Hub — MapSelector v4
+// Professional QGIS-inspired layout
+// Features: layer map preview, AOI draw + file upload, download history, credits
 
 "use client";
 
@@ -19,13 +20,14 @@ interface LayerInfo {
   name_th: string;
   geom_type: string;
   feature_count: number;
+  status?: string;
 }
 
 interface PreviewResult {
-  slug: string;
   feature_count: number;
   estimated_mb_shp?: number;
   estimated_mb_geojson?: number;
+  error?: string;
 }
 
 interface ClipResult {
@@ -60,36 +62,32 @@ interface SearchResult {
   type?: string;
 }
 
-interface CreditBalance {
-  user_id: string;
-  credits: number;
-  mode?: string;
-}
-
 // ─────────────────────────────────────────────
 // Constants
 // ─────────────────────────────────────────────
 
 const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || "";
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_BASE = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000").replace(/\/$/, "");
 
 const LAYERS_CATALOG: LayerInfo[] = [
-  { slug: "roads",      name_en: "Road Network",            name_th: "เส้นทางจราจร",          geom_type: "Linestring", feature_count: 0 },
-  { slug: "waterways",  name_en: "Waterways",                name_th: "แหล่งน้ำ",               geom_type: "Linestring", feature_count: 0 },
-  { slug: "railways",   name_en: "Railways",                 name_th: "ทางรถไฟ",               geom_type: "Linestring", feature_count: 0 },
-  { slug: "buildings",  name_en: "Buildings",                name_th: "อาคาร/สิ่งปลูกสร้าง",    geom_type: "Polygon",    feature_count: 0 },
-  { slug: "landuse",    name_en: "Land Use",                 name_th: "การใช้ประโยชน์ที่ดิน",    geom_type: "Polygon",    feature_count: 0 },
-  { slug: "natural",    name_en: "Natural Features",         name_th: "ลักษณะทางธรรมชาติ",     geom_type: "Polygon",    feature_count: 0 },
-  { slug: "pois",       name_en: "Points of Interest",       name_th: "สถานที่สำคัญ",           geom_type: "Point",      feature_count: 0 },
-  { slug: "province",   name_en: "Province Boundaries",      name_th: "ขอบเขตจังหวัด",         geom_type: "Polygon",    feature_count: 0 },
-  { slug: "amphoe",     name_en: "District Boundaries",      name_th: "ขอบเขตอำเภอ",           geom_type: "Polygon",    feature_count: 0 },
-  { slug: "tambon",     name_en: "Sub-district Boundaries",  name_th: "ขอบเขตตำบล",           geom_type: "Polygon",    feature_count: 0 },
+  { slug: "province",  name_en: "Province Boundaries",     name_th: "ขอบเขตจังหวัด",          geom_type: "Polygon",    feature_count: 0 },
+  { slug: "amphoe",    name_en: "District Boundaries",     name_th: "ขอบเขตอำเภอ",             geom_type: "Polygon",    feature_count: 0 },
+  { slug: "tambon",    name_en: "Sub-district Boundaries", name_th: "ขอบเขตตำบล",              geom_type: "Polygon",    feature_count: 0 },
+  { slug: "roads",     name_en: "Road Network",            name_th: "เส้นทางจราจร",             geom_type: "Linestring", feature_count: 0 },
+  { slug: "waterways", name_en: "Waterways",               name_th: "แหล่งน้ำ",                geom_type: "Linestring", feature_count: 0 },
+  { slug: "railways",  name_en: "Railways",                name_th: "ทางรถไฟ",                 geom_type: "Linestring", feature_count: 0 },
+  { slug: "buildings", name_en: "Buildings",               name_th: "อาคาร/สิ่งปลูกสร้าง",      geom_type: "Polygon",    feature_count: 0 },
+  { slug: "landuse",   name_en: "Land Use",                name_th: "การใช้ประโยชน์ที่ดิน",      geom_type: "Polygon",    feature_count: 0 },
+  { slug: "natural",   name_en: "Natural Features",        name_th: "ลักษณะทางธรรมชาติ",        geom_type: "Polygon",    feature_count: 0 },
+  { slug: "parks",     name_en: "National Parks",          name_th: "อุทยานแห่งชาติ",           geom_type: "Polygon",    feature_count: 0 },
+  { slug: "temples",   name_en: "Temples & Shrines",       name_th: "วัด/ศาสนสถาน",            geom_type: "Point",      feature_count: 0 },
+  { slug: "pois",      name_en: "Points of Interest",      name_th: "สถานที่สำคัญ",             geom_type: "Point",      feature_count: 0 },
 ];
 
 const FORMAT_OPTIONS = [
-  { value: "shp",     label: "Shapefile (.shp)",   icon: "📦" },
-  { value: "geojson", label: "GeoJSON (.geojson)",  icon: "🗺️" },
-  { value: "kml",     label: "KML (.kml)",          icon: "📍" },
+  { value: "geojson", label: "GeoJSON", ext: ".geojson" },
+  { value: "shp",     label: "Shapefile", ext: ".shp" },
+  { value: "kml",     label: "KML", ext: ".kml" },
 ];
 
 const CREDIT_PACKS = [
@@ -99,149 +97,130 @@ const CREDIT_PACKS = [
   { credits: 5000, price_thb: 3500, label: "Enterprise",popular: false },
 ];
 
-// Layer preview colors on the map
-const PREVIEW_COLORS: Record<string, string> = {
-  roads:      "#E74C3C",
-  waterways:  "#3498DB",
-  railways:   "#8E44AD",
-  buildings:  "#F39C12",
-  landuse:    "#27AE60",
-  natural:    "#1ABC9C",
-  pois:       "#E91E63",
-  province:   "#2ECC71",
-  amphoe:     "#9B59B6",
-  tambon:     "#FF5722",
+const LAYER_COLORS: Record<string, string> = {
+  province:  "#8B5CF6",
+  amphoe:    "#3B82F6",
+  tambon:    "#06B6D4",
+  roads:     "#EF4444",
+  waterways: "#0EA5E9",
+  railways:  "#7C3AED",
+  buildings: "#F97316",
+  landuse:   "#22C55E",
+  natural:   "#14B8A6",
+  parks:     "#16A34A",
+  temples:   "#EAB308",
+  pois:      "#EC4899",
 };
 
 // ─────────────────────────────────────────────
-// Sub-components
+// KML / GeoJSON file parser
 // ─────────────────────────────────────────────
 
-function Spinner({ message = "Processing..." }: { message?: string }) {
+function parseAOIFile(text: string, filename: string): AOIFeature | null {
+  const ext = filename.split(".").pop()?.toLowerCase();
+
+  if (ext === "geojson" || ext === "json") {
+    try {
+      const data = JSON.parse(text);
+      let geometry: GeoJSON.Geometry | undefined;
+      if (data.type === "FeatureCollection" && Array.isArray(data.features) && data.features.length > 0) {
+        geometry = data.features[0].geometry;
+      } else if (data.type === "Feature") {
+        geometry = data.geometry;
+      } else if (data.type === "Polygon" || data.type === "MultiPolygon") {
+        geometry = data;
+      }
+      if (geometry && (geometry.type === "Polygon" || geometry.type === "MultiPolygon")) {
+        return { type: "Feature", geometry, properties: {} };
+      }
+    } catch { /* invalid JSON */ }
+    return null;
+  }
+
+  if (ext === "kml") {
+    try {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(text, "application/xml");
+      // Try Polygon first
+      const poly = doc.querySelector("Polygon");
+      if (poly) {
+        const outer = poly.querySelector("outerBoundaryIs coordinates, LinearRing coordinates");
+        const raw = outer?.textContent?.trim() ?? "";
+        const coords = raw.split(/\s+/).map((c) => {
+          const p = c.split(",").map(Number);
+          return [p[0], p[1]] as [number, number];
+        }).filter((c) => !isNaN(c[0]) && !isNaN(c[1]));
+        if (coords.length >= 3) {
+          if (coords[0][0] !== coords[coords.length - 1][0] || coords[0][1] !== coords[coords.length - 1][1]) {
+            coords.push(coords[0]);
+          }
+          return { type: "Feature", geometry: { type: "Polygon", coordinates: [coords] }, properties: {} };
+        }
+      }
+    } catch { /* invalid KML */ }
+    return null;
+  }
+
+  return null;
+}
+
+// ─────────────────────────────────────────────
+// Layer symbol (QGIS legend style)
+// ─────────────────────────────────────────────
+
+function LayerSymbol({ slug, geomType, size = 16 }: { slug: string; geomType: string; size?: number }) {
+  const color = LAYER_COLORS[slug] || "#888";
+  const t = geomType.toLowerCase();
+  if (t === "point") {
+    return (
+      <span style={{ width: size, height: size, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+        <span style={{ width: size * 0.65, height: size * 0.65, borderRadius: "50%", background: color, display: "inline-block" }} />
+      </span>
+    );
+  }
+  if (t === "polygon") {
+    return (
+      <span style={{ width: size, height: size * 0.75, border: `2px solid ${color}`, borderRadius: 2, background: color + "30", display: "inline-block", flexShrink: 0 }} />
+    );
+  }
+  // linestring
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-      <div className="bg-white rounded-xl shadow-2xl p-6 flex flex-col items-center gap-3">
-        <div className="text-4xl animate-spin">🌏</div>
-        <p className="text-gray-700 font-medium">{message}</p>
-        <div className="w-48 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+    <span style={{ width: size, height: 3, background: color, borderRadius: 2, display: "inline-block", flexShrink: 0, marginTop: 4 }} />
+  );
+}
+
+// ─────────────────────────────────────────────
+// Toast notification
+// ─────────────────────────────────────────────
+
+interface Toast { id: number; msg: string; type: "error" | "info" | "success" }
+
+let _toastId = 0;
+
+// ─────────────────────────────────────────────
+// Small reusable components
+// ─────────────────────────────────────────────
+
+function SectionHeader({ label, open, onToggle }: { label: string; open: boolean; onToggle: () => void }) {
+  return (
+    <button onClick={onToggle}
+      className="w-full flex items-center justify-between px-4 py-2.5 bg-slate-800 text-white text-xs font-bold uppercase tracking-widest hover:bg-slate-700 transition-colors select-none">
+      <span>{label}</span>
+      <span className={`transition-transform duration-200 ${open ? "rotate-180" : ""}`}>▾</span>
+    </button>
+  );
+}
+
+function Spinner({ message = "Processing…" }: { message?: string }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-2xl p-7 flex flex-col items-center gap-3 min-w-[220px]">
+        <div className="text-5xl animate-spin">🌏</div>
+        <p className="text-gray-700 font-semibold text-sm">{message}</p>
+        <div className="w-40 h-1.5 bg-gray-200 rounded-full overflow-hidden">
           <div className="h-full bg-blue-600 animate-pulse rounded-full w-3/4" />
         </div>
       </div>
-    </div>
-  );
-}
-
-function ConfirmModal({ creditsNeeded, userCredits, onConfirm, onCancel }: {
-  creditsNeeded: number; userCredits: number;
-  onConfirm: () => void; onCancel: () => void;
-}) {
-  const canAfford = userCredits >= creditsNeeded;
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6">
-        <h2 className="text-lg font-bold text-gray-800 mb-2">📥 Confirm Download</h2>
-        <p className="text-gray-600 text-sm mb-4">
-          This will cost <strong className="text-blue-600">{creditsNeeded} credits</strong>.
-        </p>
-        <div className="bg-gray-50 rounded-lg p-3 mb-4 text-sm space-y-1">
-          <div className="flex justify-between"><span>Balance:</span><span className="font-medium">{userCredits} cr</span></div>
-          <div className="flex justify-between text-red-500"><span>Cost:</span><span className="font-medium">−{creditsNeeded} cr</span></div>
-          <hr className="my-1" />
-          <div className="flex justify-between"><span>After:</span>
-            <span className={`font-bold ${canAfford ? "text-green-600" : "text-red-600"}`}>{userCredits - creditsNeeded} cr</span>
-          </div>
-        </div>
-        {!canAfford && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-            ⚠️ Not enough credits. <a href="/credits" className="underline font-medium">Top up →</a>
-          </div>
-        )}
-        <div className="flex gap-3">
-          <button onClick={onCancel} className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-medium">Cancel</button>
-          <button onClick={onConfirm} disabled={!canAfford} className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed">
-            {canAfford ? "Confirm" : "Insufficient"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function TopupModal({ packs, onSelect, onClose, loading }: {
-  packs: typeof CREDIT_PACKS;
-  onSelect: (pack: typeof CREDIT_PACKS[0]) => void;
-  onClose: () => void;
-  loading: boolean;
-}) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
-        <div className="flex items-center justify-between mb-5">
-          <h2 className="text-lg font-bold text-gray-800">💰 Top Up Credits</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">×</button>
-        </div>
-        <div className="space-y-3">
-          {packs.map((pack) => (
-            <button key={pack.credits} onClick={() => onSelect(pack)} disabled={loading}
-              className={`w-full flex items-center justify-between p-4 rounded-xl border-2 transition-all ${
-                pack.popular ? "border-blue-500 bg-blue-50" : "border-gray-200 hover:border-blue-300"}`}>
-              <div className="text-left">
-                <p className="font-bold text-gray-800">{pack.label}</p>
-                <p className="text-sm text-gray-500">{pack.credits.toLocaleString()} credits</p>
-              </div>
-              <div className="text-right">
-                <p className="font-bold text-blue-600">฿{pack.price_thb.toLocaleString()}</p>
-                {pack.popular && <span className="text-xs bg-blue-600 text-white px-2 py-0.5 rounded-full">Popular</span>}
-              </div>
-            </button>
-          ))}
-        </div>
-        <p className="text-xs text-gray-400 mt-4 text-center">Powered by Stripe — secure checkout</p>
-      </div>
-    </div>
-  );
-}
-
-function EmailModal({ onSubmit }: { onSubmit: (email: string) => void }) {
-  const [email, setEmail] = React.useState("");
-  const [error, setError] = React.useState("");
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-7">
-        <div className="text-center mb-5">
-          <div className="text-4xl mb-2">🇹🇭</div>
-          <h2 className="text-xl font-bold text-gray-800">Welcome to Thai GeoData Hub</h2>
-          <p className="text-gray-500 text-sm mt-1">Enter your email to track downloads and credits</p>
-        </div>
-        <form onSubmit={(e) => {
-          e.preventDefault();
-          const t = email.trim().toLowerCase();
-          if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(t)) { setError("Enter a valid email."); return; }
-          onSubmit(t);
-        }} className="space-y-3">
-          <input type="email" value={email} onChange={(e) => { setEmail(e.target.value); setError(""); }}
-            placeholder="you@email.com" autoFocus
-            className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-          {error && <p className="text-red-500 text-xs">{error}</p>}
-          <button type="submit" className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition">
-            Start Exploring →
-          </button>
-        </form>
-        <p className="text-xs text-gray-400 text-center mt-3">No password needed. Your email is your account ID.</p>
-      </div>
-    </div>
-  );
-}
-
-function CreditBadge({ balance, onTopup }: { balance: number; onTopup: () => void }) {
-  return (
-    <div className="flex items-center gap-2 bg-blue-700 text-white px-4 py-2 rounded-full text-sm">
-      <span>💳</span>
-      <span className="font-semibold">{balance.toLocaleString()}</span>
-      <span className="text-blue-200">credits</span>
-      <button onClick={onTopup} className="ml-2 bg-blue-500 hover:bg-blue-400 px-3 py-0.5 rounded-full text-xs font-medium transition">
-        + Top up
-      </button>
     </div>
   );
 }
@@ -254,13 +233,16 @@ export default function MapSelector() {
   // ── Refs
   const mapContainer = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
+  const startDrawingRef = useRef<() => void>(() => {});
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // ── Map state
   const [mapReady, setMapReady] = useState(false);
+  const [isDrawing, setIsDrawing] = useState(false);
 
   // ── AOI
   const [aoi, setAoi] = useState<AOIFeature | null>(null);
-  const [aoiCoords, setAoiCoords] = useState<number[][][] | null>(null);
+  const [aoiSource, setAoiSource] = useState<"draw" | "file" | null>(null);
 
   // ── User & credits
   const [userId, setUserId] = useState<string>(() =>
@@ -269,68 +251,95 @@ export default function MapSelector() {
   const [showEmailModal, setShowEmailModal] = useState<boolean>(() =>
     typeof window !== "undefined" ? !localStorage.getItem("geodata_email") : true
   );
-  const [creditBalance, setCreditBalance] = useState<CreditBalance>({ user_id: "", credits: 0 });
+  const [credits, setCredits] = useState(0);
 
-  // ── Sidebar tabs
-  const [activeTab, setActiveTab] = useState<"layers" | "downloads">("layers");
-
-  // ── Layer selection
+  // ── Layers
   const [layers, setLayers] = useState<LayerInfo[]>(LAYERS_CATALOG);
-  const [selectedLayers, setSelectedLayers] = useState<string[]>(["roads"]);
-  const [selectedFormats, setSelectedFormats] = useState<string[]>(["shp", "geojson"]);
+  const [selectedLayers, setSelectedLayers] = useState<string[]>(["province", "roads"]);
+  const [loadingLayerSlug, setLoadingLayerSlug] = useState<string | null>(null);
+  const [layerErrors, setLayerErrors] = useState<Record<string, string>>({});
+  const visibleOnMap = useRef<Set<string>>(new Set());
 
-  // ── Layer map preview
-  const [loadingPreviewSlug, setLoadingPreviewSlug] = useState<string | null>(null);
-  const previewLayersOnMap = useRef<Set<string>>(new Set());
-
-  // ── AOI Preview (feature count)
+  // ── Export
+  const [selectedFormats, setSelectedFormats] = useState<string[]>(["geojson", "shp"]);
   const [previewResults, setPreviewResults] = useState<Record<string, PreviewResult>>({});
   const [loadingPreview, setLoadingPreview] = useState(false);
 
   // ── Download
   const [downloading, setDownloading] = useState(false);
-  const [clipResult, setClipResult] = useState<ClipResult | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [lastClip, setLastClip] = useState<ClipResult | null>(null);
 
-  // ── Modals
-  const [showConfirm, setShowConfirm] = useState(false);
-  const [showTopup, setShowTopup] = useState(false);
-  const [topupLoading, setTopupLoading] = useState(false);
+  // ── History
+  const [history, setHistory] = useState<DownloadRecord[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [redownloading, setRedownloading] = useState<string | null>(null);
 
   // ── Search
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [searching, setSearching] = useState(false);
 
-  // ── Download history
-  const [downloadHistory, setDownloadHistory] = useState<DownloadRecord[]>([]);
-  const [historyLoading, setHistoryLoading] = useState(false);
-  const [redownloading, setRedownloading] = useState<string | null>(null);
+  // ── UI
+  const [openSections, setOpenSections] = useState({ layers: true, aoi: true, export: true, history: false });
+  const [showTopup, setShowTopup] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [toasts, setToasts] = useState<Toast[]>([]);
+  const [apiOk, setApiOk] = useState<boolean | null>(null); // null = checking
 
-  // ── Effects
+  const toggleSection = (k: keyof typeof openSections) =>
+    setOpenSections((s) => ({ ...s, [k]: !s[k] }));
+
+  // ─────────────────────────────────────────────
+  // Toast helpers
+  // ─────────────────────────────────────────────
+
+  const addToast = useCallback((msg: string, type: Toast["type"] = "info") => {
+    const id = ++_toastId;
+    setToasts((t) => [...t, { id, msg, type }]);
+    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 4000);
+  }, []);
+
+  // ─────────────────────────────────────────────
+  // API health check on mount
+  // ─────────────────────────────────────────────
+
+  useEffect(() => {
+    const check = async () => {
+      try {
+        const r = await fetch(`${API_BASE}/health`, { signal: AbortSignal.timeout(8000) });
+        setApiOk(r.ok);
+        if (!r.ok) addToast("Backend unreachable — set NEXT_PUBLIC_API_URL in Vercel", "error");
+      } catch {
+        setApiOk(false);
+        addToast("Cannot reach backend. Check NEXT_PUBLIC_API_URL env var.", "error");
+      }
+    };
+    check();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ─────────────────────────────────────────────
+  // Init effects
+  // ─────────────────────────────────────────────
+
   useEffect(() => {
     fetchLayers();
     if (userId) fetchCredits();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
 
-  useEffect(() => {
-    if (activeTab === "downloads" && userId) {
-      fetchHistory();
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, userId]);
+  // ─────────────────────────────────────────────
+  // Map initialisation
+  // ─────────────────────────────────────────────
 
-  // ── Initialize map
   useEffect(() => {
     if (!mapContainer.current || mapRef.current) return;
-
     mapboxgl.accessToken = MAPBOX_TOKEN;
 
     const map = new mapboxgl.Map({
       container: mapContainer.current,
       style: "mapbox://styles/mapbox/streets-v12",
-      center: [100.9925, 15.8700],
+      center: [100.9925, 15.87],
       zoom: 6,
     });
 
@@ -338,694 +347,866 @@ export default function MapSelector() {
     map.addControl(new mapboxgl.ScaleControl(), "bottom-left");
 
     map.on("load", () => {
-      // AOI layer
+      // AOI source
       map.addSource("aoi", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
-      map.addLayer({ id: "aoi-fill", type: "fill", source: "aoi", paint: { "fill-color": "#3182CE", "fill-opacity": 0.15 } });
-      map.addLayer({ id: "aoi-line", type: "line", source: "aoi", paint: { "line-color": "#3182CE", "line-width": 2 } });
-
-      // Search-result highlight layer
-      map.addSource("search-aoi", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
-      map.addLayer({ id: "search-aoi-fill", type: "fill", source: "search-aoi", paint: { "fill-color": "#F59E0B", "fill-opacity": 0.2 } });
-      map.addLayer({ id: "search-aoi-line", type: "line", source: "search-aoi", paint: { "line-color": "#F59E0B", "line-width": 3 } });
+      map.addLayer({ id: "aoi-fill", type: "fill", source: "aoi", paint: { "fill-color": "#2563EB", "fill-opacity": 0.12 } });
+      map.addLayer({ id: "aoi-line", type: "line", source: "aoi", paint: { "line-color": "#2563EB", "line-width": 2.5, "line-dasharray": [4, 2] } });
 
       setMapReady(true);
     });
 
-    // ── Polygon drawing
-    let drawingPoints: [number, number][] = [];
-    const drawingMarkers: mapboxgl.Marker[] = [];
-
-    const startDrawing = () => {
-      map.getCanvas().style.cursor = "crosshair";
-
-      const onClick = (e: mapboxgl.MapMouseEvent) => {
-        const lngLat: [number, number] = [e.lngLat.lng, e.lngLat.lat];
-        drawingPoints.push(lngLat);
-
-        const el = document.createElement("div");
-        el.style.cssText = "width:10px;height:10px;background:#3182CE;border-radius:50%;border:2px solid white;";
-        const m = new mapboxgl.Marker({ element: el }).setLngLat(lngLat).addTo(map);
-        drawingMarkers.push(m);
-
-        if (drawingPoints.length >= 2) {
-          const lineData: GeoJSON.Feature = { type: "Feature", geometry: { type: "LineString", coordinates: drawingPoints }, properties: {} };
-          if (map.getSource("draw-line")) {
-            (map.getSource("draw-line") as mapboxgl.GeoJSONSource).setData(lineData);
-          } else {
-            map.addSource("draw-line", { type: "geojson", data: lineData });
-            map.addLayer({ id: "draw-line", type: "line", source: "draw-line", paint: { "line-color": "#3182CE", "line-width": 2 } });
-          }
-        }
-      };
-
-      const onDblClick = (e: mapboxgl.MapMouseEvent) => {
-        e.preventDefault();
-        if (drawingPoints.length >= 3) {
-          const coords = [...drawingPoints, drawingPoints[0]];
-          setAoiCoords([coords]);
-          const feature: AOIFeature = { type: "Feature", geometry: { type: "Polygon", coordinates: [coords] }, properties: {} };
-          setAoi(feature);
-          const src = map.getSource("aoi") as mapboxgl.GeoJSONSource;
-          src?.setData({ type: "FeatureCollection", features: [feature] });
-        }
-        drawingMarkers.forEach((m) => m.remove());
-        drawingMarkers.length = 0;
-        drawingPoints = [];
-        cleanup();
-      };
-
-      const cleanup = () => {
-        map.getCanvas().style.cursor = "";
-        map.off("click", onClick);
-        map.off("dblclick", onDblClick);
-        if (map.getLayer("draw-line")) map.removeLayer("draw-line");
-        if (map.getSource("draw-line")) map.removeSource("draw-line");
-      };
-
-      const onKeydown = (e: KeyboardEvent) => {
-        if (e.key === "Escape") { drawingMarkers.forEach((m) => m.remove()); drawingMarkers.length = 0; drawingPoints = []; cleanup(); }
-      };
-
-      map.on("click", onClick);
-      map.on("dblclick", onDblClick);
-      map.getContainer().addEventListener("keydown", onKeydown, { once: true });
+    // ── Drawing logic
+    const drawing = {
+      active: false,
+      points: [] as [number, number][],
+      markers: [] as mapboxgl.Marker[],
+      onClick: null as ((e: mapboxgl.MapMouseEvent) => void) | null,
+      onDblClick: null as ((e: mapboxgl.MapMouseEvent) => void) | null,
+      onKey: null as ((e: KeyboardEvent) => void) | null,
     };
 
+    const cleanupDrawing = () => {
+      drawing.active = false;
+      map.getCanvas().style.cursor = "";
+      if (drawing.onClick) map.off("click", drawing.onClick);
+      if (drawing.onDblClick) map.off("dblclick", drawing.onDblClick);
+      if (drawing.onKey) document.removeEventListener("keydown", drawing.onKey);
+      drawing.onClick = null; drawing.onDblClick = null; drawing.onKey = null;
+      if (map.getLayer("draw-line")) map.removeLayer("draw-line");
+      if (map.getSource("draw-line")) map.removeSource("draw-line");
+      drawing.markers.forEach((m) => m.remove());
+      drawing.markers = [];
+      drawing.points = [];
+    };
+
+    const startDrawing = () => {
+      if (!map.isStyleLoaded()) return;
+      cleanupDrawing();
+      drawing.active = true;
+      setIsDrawing(true);
+      map.getCanvas().style.cursor = "crosshair";
+
+      drawing.onClick = (e: mapboxgl.MapMouseEvent) => {
+        const lngLat: [number, number] = [e.lngLat.lng, e.lngLat.lat];
+        drawing.points.push(lngLat);
+
+        const el = document.createElement("div");
+        el.style.cssText = "width:9px;height:9px;background:#2563EB;border-radius:50%;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,.4);";
+        const m = new mapboxgl.Marker({ element: el }).setLngLat(lngLat).addTo(map);
+        drawing.markers.push(m);
+
+        const data: GeoJSON.Feature = { type: "Feature", geometry: { type: "LineString", coordinates: drawing.points }, properties: {} };
+        if (map.getSource("draw-line")) {
+          (map.getSource("draw-line") as mapboxgl.GeoJSONSource).setData(data);
+        } else if (drawing.points.length >= 2) {
+          map.addSource("draw-line", { type: "geojson", data });
+          map.addLayer({ id: "draw-line", type: "line", source: "draw-line", paint: { "line-color": "#2563EB", "line-width": 2 } });
+        }
+      };
+
+      drawing.onDblClick = (e: mapboxgl.MapMouseEvent) => {
+        e.preventDefault();
+        if (drawing.points.length < 3) { addToast("Need at least 3 points to close polygon", "info"); return; }
+        const coords = [...drawing.points, drawing.points[0]];
+        const feature: AOIFeature = { type: "Feature", geometry: { type: "Polygon", coordinates: [coords] }, properties: {} };
+        setAoi(feature);
+        setAoiSource("draw");
+        (map.getSource("aoi") as mapboxgl.GeoJSONSource)?.setData({ type: "FeatureCollection", features: [feature] });
+        cleanupDrawing();
+        setIsDrawing(false);
+        addToast("Area of Interest set ✓", "success");
+      };
+
+      drawing.onKey = (e: KeyboardEvent) => {
+        if (e.key === "Escape") { cleanupDrawing(); setIsDrawing(false); addToast("Drawing cancelled", "info"); }
+      };
+
+      map.on("click", drawing.onClick);
+      map.on("dblclick", drawing.onDblClick);
+      document.addEventListener("keydown", drawing.onKey);
+    };
+
+    startDrawingRef.current = startDrawing;
     map.on("load", startDrawing);
     mapRef.current = map;
 
     return () => { map.remove(); mapRef.current = null; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Auto-start drawing when mapReady changes
+  useEffect(() => {
+    if (mapReady && !aoi) startDrawingRef.current();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mapReady]);
+
   // ─────────────────────────────────────────────
-  // Layer map preview helpers
+  // Layer map preview
   // ─────────────────────────────────────────────
 
-  const addLayerPreview = useCallback(async (slug: string) => {
+  const addLayerToMap = useCallback(async (slug: string) => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
+    if (visibleOnMap.current.has(slug)) return;
 
-    setLoadingPreviewSlug(slug);
+    setLoadingLayerSlug(slug);
+    setLayerErrors((e) => { const n = { ...e }; delete n[slug]; return n; });
+
     try {
       const bounds = map.getBounds();
-      const bbox = bounds
-        ? `${bounds.getWest()},${bounds.getSouth()},${bounds.getEast()},${bounds.getNorth()}`
+      const bboxParam = bounds
+        ? `bbox=${bounds.getWest()},${bounds.getSouth()},${bounds.getEast()},${bounds.getNorth()}&`
         : "";
-      const resp = await fetch(`${API_BASE}/layer-sample/${slug}?bbox=${bbox}&limit=200`);
-      if (!resp.ok) return;
+      const resp = await fetch(`${API_BASE}/layer-sample/${slug}?${bboxParam}limit=300`, {
+        signal: AbortSignal.timeout(15000),
+      });
+      if (!resp.ok) {
+        const detail = await resp.json().then((d) => d.detail).catch(() => resp.statusText);
+        throw new Error(detail);
+      }
       const geojson = await resp.json();
+      if (!geojson.features || geojson.features.length === 0) {
+        addToast(`${slug}: no data in current view`, "info");
+        return;
+      }
 
       const sourceId = `preview-${slug}`;
       const layerId  = `preview-${slug}-layer`;
-      const color    = PREVIEW_COLORS[slug] || "#888888";
+      const color    = LAYER_COLORS[slug] || "#888";
       const meta     = LAYERS_CATALOG.find((l) => l.slug === slug);
-      const geomType = (meta?.geom_type || "").toLowerCase();
+      const gt       = (meta?.geom_type || "").toLowerCase();
 
-      if (map.getSource(sourceId)) {
-        (map.getSource(sourceId) as mapboxgl.GeoJSONSource).setData(geojson);
-      } else {
-        map.addSource(sourceId, { type: "geojson", data: geojson });
-      }
+      if (!map.getSource(sourceId)) map.addSource(sourceId, { type: "geojson", data: geojson });
+      else (map.getSource(sourceId) as mapboxgl.GeoJSONSource).setData(geojson);
 
       if (!map.getLayer(layerId)) {
-        if (geomType === "point") {
+        if (gt === "point") {
           map.addLayer({ id: layerId, type: "circle", source: sourceId,
-            paint: { "circle-color": color, "circle-radius": 5, "circle-opacity": 0.85 } });
-        } else if (geomType === "polygon") {
+            paint: { "circle-color": color, "circle-radius": 5, "circle-opacity": 0.9, "circle-stroke-color": "#fff", "circle-stroke-width": 1 } });
+        } else if (gt === "polygon") {
           map.addLayer({ id: layerId, type: "fill", source: sourceId,
-            paint: { "fill-color": color, "fill-opacity": 0.25, "fill-outline-color": color } });
+            paint: { "fill-color": color, "fill-opacity": 0.2 } });
+          map.addLayer({ id: `${layerId}-outline`, type: "line", source: sourceId,
+            paint: { "line-color": color, "line-width": 1.5 } });
         } else {
           map.addLayer({ id: layerId, type: "line", source: sourceId,
             paint: { "line-color": color, "line-width": 2, "line-opacity": 0.85 } });
         }
       }
 
-      previewLayersOnMap.current.add(slug);
-    } catch (err) {
-      console.warn(`Layer preview failed for ${slug}:`, err);
+      visibleOnMap.current.add(slug);
+      addToast(`${slug} loaded on map`, "success");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setLayerErrors((e) => ({ ...e, [slug]: msg }));
+      addToast(`${slug}: ${msg}`, "error");
     } finally {
-      setLoadingPreviewSlug(null);
+      setLoadingLayerSlug(null);
     }
-  }, [mapReady]);
+  }, [mapReady, addToast]);
 
-  const removeLayerPreview = useCallback((slug: string) => {
+  const removeLayerFromMap = useCallback((slug: string) => {
     const map = mapRef.current;
     if (!map) return;
-    const sourceId = `preview-${slug}`;
-    const layerId  = `preview-${slug}-layer`;
+    const layerId = `preview-${slug}-layer`;
+    if (map.getLayer(`${layerId}-outline`)) map.removeLayer(`${layerId}-outline`);
     if (map.getLayer(layerId))  map.removeLayer(layerId);
-    if (map.getSource(sourceId)) map.removeSource(sourceId);
-    previewLayersOnMap.current.delete(slug);
+    if (map.getSource(`preview-${slug}`)) map.removeSource(`preview-${slug}`);
+    visibleOnMap.current.delete(slug);
   }, []);
+
+  const toggleLayer = useCallback((slug: string) => {
+    setSelectedLayers((prev) => {
+      const next = prev.includes(slug) ? prev.filter((l) => l !== slug) : [...prev, slug];
+      // Side-effect: add/remove map preview
+      if (!prev.includes(slug)) addLayerToMap(slug);
+      else removeLayerFromMap(slug);
+      return next;
+    });
+    // Clear stale preview results when layers change
+    setPreviewResults({});
+  }, [addLayerToMap, removeLayerFromMap]);
+
+  // Load selected layers on map when map becomes ready
+  useEffect(() => {
+    if (!mapReady) return;
+    selectedLayers.forEach((slug) => { if (!visibleOnMap.current.has(slug)) addLayerToMap(slug); });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mapReady]);
+
+  // ─────────────────────────────────────────────
+  // AOI helpers
+  // ─────────────────────────────────────────────
+
+  const setAoiOnMap = (feature: AOIFeature) => {
+    const src = mapRef.current?.getSource("aoi") as mapboxgl.GeoJSONSource | undefined;
+    src?.setData({ type: "FeatureCollection", features: [feature] });
+    // Fit map to AOI
+    if (feature.geometry.type === "Polygon") {
+      const coords = feature.geometry.coordinates[0];
+      const lngs = coords.map((c) => c[0]);
+      const lats = coords.map((c) => c[1]);
+      mapRef.current?.fitBounds(
+        [[Math.min(...lngs), Math.min(...lats)], [Math.max(...lngs), Math.max(...lats)]],
+        { padding: 60, duration: 1000 }
+      );
+    }
+  };
+
+  const clearAoi = () => {
+    setAoi(null);
+    setAoiSource(null);
+    setPreviewResults({});
+    setLastClip(null);
+    const src = mapRef.current?.getSource("aoi") as mapboxgl.GeoJSONSource | undefined;
+    src?.setData({ type: "FeatureCollection", features: [] });
+    // Restart drawing mode
+    if (mapReady) startDrawingRef.current();
+  };
+
+  // ─────────────────────────────────────────────
+  // AOI file upload
+  // ─────────────────────────────────────────────
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const text = ev.target?.result as string;
+      const feature = parseAOIFile(text, file.name);
+      if (!feature) {
+        addToast(`Could not parse AOI from ${file.name}. Use GeoJSON Polygon or KML Polygon.`, "error");
+        return;
+      }
+      setAoi(feature);
+      setAoiSource("file");
+      setAoiOnMap(feature);
+      addToast(`AOI loaded from ${file.name} ✓`, "success");
+    };
+    reader.readAsText(file);
+    // Reset input
+    e.target.value = "";
+  };
 
   // ─────────────────────────────────────────────
   // API calls
   // ─────────────────────────────────────────────
 
-  const handleEmailSubmit = (email: string) => {
-    localStorage.setItem("geodata_email", email);
-    setUserId(email);
-    setShowEmailModal(false);
+  const fetchLayers = async () => {
+    try {
+      const r = await fetch(`${API_BASE}/layers`, { signal: AbortSignal.timeout(10000) });
+      if (r.ok) { const d = await r.json(); if (d.length) setLayers(d); }
+    } catch { /* keep static catalog */ }
   };
 
   const fetchCredits = async () => {
     try {
-      const resp = await fetch(`${API_BASE}/payments/credits/${userId}`);
-      if (resp.ok) setCreditBalance(await resp.json());
-    } catch {
-      setCreditBalance({ user_id: userId, credits: 0, mode: "demo" });
-    }
-  };
-
-  const fetchLayers = async () => {
-    try {
-      const resp = await fetch(`${API_BASE}/layers`);
-      if (resp.ok) {
-        const data = await resp.json();
-        setLayers(data.length ? data : LAYERS_CATALOG);
-      }
-    } catch { /* keep static catalog */ }
+      const r = await fetch(`${API_BASE}/payments/credits/${userId}`, { signal: AbortSignal.timeout(8000) });
+      if (r.ok) { const d = await r.json(); setCredits(d.credits ?? 0); }
+    } catch { setCredits(0); }
   };
 
   const fetchHistory = async () => {
     if (!userId) return;
     setHistoryLoading(true);
     try {
-      const resp = await fetch(`${API_BASE}/history/${userId}`);
-      if (resp.ok) {
-        const data = await resp.json();
-        setDownloadHistory(data.downloads || []);
-      }
+      const r = await fetch(`${API_BASE}/history/${userId}`, { signal: AbortSignal.timeout(10000) });
+      if (r.ok) { const d = await r.json(); setHistory(d.downloads || []); }
     } catch { /* ignore */ }
     finally { setHistoryLoading(false); }
   };
 
   const handleSearch = async () => {
-    if (!searchQuery.trim() || searchQuery.length < 2) return;
+    if (searchQuery.length < 2) return;
     setSearching(true);
     try {
-      const resp = await fetch(`${API_BASE}/search-location?q=${encodeURIComponent(searchQuery.trim())}`);
-      if (resp.ok) {
-        const data = await resp.json();
-        setSearchResults(data.results || []);
-      }
+      const r = await fetch(`${API_BASE}/search-location?q=${encodeURIComponent(searchQuery)}`, { signal: AbortSignal.timeout(10000) });
+      if (r.ok) { const d = await r.json(); setSearchResults(d.results || []); }
     } catch { /* ignore */ }
     finally { setSearching(false); }
   };
 
-  const handleSelectSearchResult = (result: SearchResult) => {
-    if (!mapRef.current) return;
-    mapRef.current.flyTo({ center: [result.lng, result.lat], zoom: 12, duration: 1500 });
-    if (result.bbox) {
-      const bbox = result.bbox;
-      const coords: [number, number][] = [[bbox[0], bbox[1]], [bbox[2], bbox[1]], [bbox[2], bbox[3]], [bbox[0], bbox[3]], [bbox[0], bbox[1]]];
-      const feature: AOIFeature = { type: "Feature", geometry: { type: "Polygon", coordinates: [coords] }, properties: {} };
-      const src = mapRef.current.getSource("search-aoi") as mapboxgl.GeoJSONSource;
-      src?.setData({ type: "FeatureCollection", features: [feature] });
-      mapRef.current.fitBounds([[bbox[0], bbox[1]], [bbox[2], bbox[3]]], { padding: 50, duration: 1500 });
-    }
+  const selectSearchResult = (res: SearchResult) => {
+    const map = mapRef.current;
+    if (!map) return;
+    map.flyTo({ center: [res.lng, res.lat], zoom: 12, duration: 1200 });
     setSearchResults([]);
     setSearchQuery("");
   };
 
   const handlePreview = async () => {
-    if (!aoi || selectedLayers.length === 0) { setError("Draw an AOI and select at least one layer."); return; }
+    if (!aoi) { addToast("Draw or upload an AOI first", "info"); return; }
+    if (selectedLayers.length === 0) { addToast("Select at least one layer", "info"); return; }
     setLoadingPreview(true);
-    setError(null);
+    setPreviewResults({});
     try {
-      const resp = await fetch(`${API_BASE}/preview`, {
+      const r = await fetch(`${API_BASE}/preview`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ aoi, layers: selectedLayers, formats: selectedFormats }),
+        signal: AbortSignal.timeout(30000),
       });
-      if (!resp.ok) throw new Error((await resp.json()).detail || "Preview failed");
-      const data = await resp.json();
-      setPreviewResults(data.layers || {});
+      if (!r.ok) throw new Error((await r.json()).detail || `HTTP ${r.status}`);
+      const d = await r.json();
+      setPreviewResults(d.layers || {});
     } catch (err: unknown) {
-      setError(`Preview failed: ${err instanceof Error ? err.message : String(err)}`);
+      const msg = err instanceof Error ? err.message : String(err);
+      addToast(`Preview failed: ${msg}`, "error");
     } finally {
       setLoadingPreview(false);
     }
   };
 
-  const calculateCreditsNeeded = (): number => {
-    const totalFeatures = Object.values(previewResults).reduce((s, r) => s + (r?.feature_count || 0), 0);
+  const calcCredits = (): number => {
+    const totalF = Object.values(previewResults).reduce((s, r) => s + (r?.feature_count || 0), 0);
     const totalMb = Object.values(previewResults).reduce((s, r) => s + (r?.estimated_mb_geojson || 0), 0);
-    if (totalFeatures <= 50) return 0;
-    return Math.max(5, Math.floor((totalFeatures - 50) / 100) + Math.max(0, Math.floor((totalMb - 5) / 10)));
+    if (totalF <= 50) return 0;
+    return Math.max(5, Math.floor((totalF - 50) / 100) + Math.max(0, Math.floor((totalMb - 5) / 10)));
   };
 
-  const handleDownloadClick = async () => {
-    if (!aoi || selectedLayers.length === 0) { setError("Draw an AOI and select a layer."); return; }
-    if (Object.keys(previewResults).length === 0) await handlePreview();
-    const needed = calculateCreditsNeeded();
-    if (needed > 0 && creditBalance.credits < needed) {
-      setError(`Need ${needed} credits, you have ${creditBalance.credits}. Please top up.`);
-      setShowTopup(true);
-      return;
-    }
-    if (needed > 0) setShowConfirm(true);
-    else await executeDownload(needed);
-  };
+  const creditsNeeded = calcCredits();
+  const totalFeatures = Object.values(previewResults).reduce((s, r) => s + (r?.feature_count || 0), 0);
+  const totalMb = Object.values(previewResults).reduce((s, r) => s + (r?.estimated_mb_geojson || 0), 0);
 
-  const executeDownload = async (creditsNeeded: number) => {
+  const executeDownload = async () => {
     setShowConfirm(false);
     setDownloading(true);
-    setError(null);
-    setClipResult(null);
     try {
-      const resp = await fetch(`${API_BASE}/clip-data`, {
+      const r = await fetch(`${API_BASE}/clip-data`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ aoi, layers: selectedLayers, formats: selectedFormats, user_id: userId }),
+        signal: AbortSignal.timeout(120000),
       });
-      if (!resp.ok) {
-        const err = await resp.json();
-        if (resp.status === 402) { setError(`❌ ${err.detail}`); setShowTopup(true); return; }
-        throw new Error(err.detail || "Clip failed");
+      if (!r.ok) {
+        const err = await r.json();
+        if (r.status === 402) { addToast(`Insufficient credits: ${err.detail}`, "error"); setShowTopup(true); return; }
+        throw new Error(err.detail || `HTTP ${r.status}`);
       }
-      const result: ClipResult = await resp.json();
-      setClipResult(result);
+      const result: ClipResult = await r.json();
+      setLastClip(result);
       await fetchCredits();
-
-      // Refresh history if on downloads tab
-      if (activeTab === "downloads") fetchHistory();
-
       // Trigger download
       const url = result.presigned_url || `${API_BASE}/download/${result.download_id}`;
-      const a = document.createElement("a");
-      a.href = url; a.target = "_blank"; a.rel = "noopener noreferrer";
+      const a = document.createElement("a"); a.href = url; a.target = "_blank"; a.rel = "noopener noreferrer";
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      addToast("Download started ✓", "success");
     } catch (err: unknown) {
-      setError(`Download failed: ${err instanceof Error ? err.message : String(err)}`);
+      addToast(`Download failed: ${err instanceof Error ? err.message : String(err)}`, "error");
     } finally {
       setDownloading(false);
     }
   };
 
-  const handleTopupSelect = async (pack: typeof CREDIT_PACKS[0]) => {
-    setTopupLoading(true);
-    try {
-      const resp = await fetch(`${API_BASE}/payments/create-checkout-session`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ user_id: userId, amount: pack.credits,
-          redirect_url: `${window.location.origin}/credits?success=1`,
-          cancel_url: `${window.location.origin}/credits?canceled=1` }),
-      });
-      if (!resp.ok) throw new Error(await resp.text());
-      const data = await resp.json();
-      window.location.href = data.checkout_url;
-    } catch (err: unknown) {
-      setError(`Top-up failed: ${err instanceof Error ? err.message : String(err)}`);
-    } finally {
-      setTopupLoading(false);
-    }
+  const handleDownload = () => {
+    if (!aoi) { addToast("No AOI selected", "info"); return; }
+    if (selectedLayers.length === 0) { addToast("Select at least one layer", "info"); return; }
+    if (Object.keys(previewResults).length === 0) { addToast("Run 'Calculate Cost' first", "info"); return; }
+    if (creditsNeeded > credits) { addToast(`Need ${creditsNeeded} credits, you have ${credits}`, "error"); setShowTopup(true); return; }
+    if (creditsNeeded > 0) setShowConfirm(true);
+    else executeDownload();
   };
 
-  const handleRedownload = async (record: DownloadRecord) => {
-    setRedownloading(record.download_id);
-    setError(null);
+  const handleRedownload = async (rec: DownloadRecord) => {
+    setRedownloading(rec.download_id);
     try {
-      const resp = await fetch(`${API_BASE}/redownload`, {
+      const r = await fetch(`${API_BASE}/redownload`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ user_id: userId, download_id: record.download_id }),
+        body: JSON.stringify({ user_id: userId, download_id: rec.download_id }),
+        signal: AbortSignal.timeout(15000),
       });
-      if (!resp.ok) {
-        const err = await resp.json();
-        throw new Error(err.detail || "Re-download failed");
-      }
-      const data = await resp.json();
-      const a = document.createElement("a");
-      a.href = data.presigned_url; a.target = "_blank"; a.rel = "noopener noreferrer";
+      if (!r.ok) throw new Error((await r.json()).detail);
+      const d = await r.json();
+      const a = document.createElement("a"); a.href = d.presigned_url; a.target = "_blank"; a.rel = "noopener noreferrer";
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      addToast("Re-download started ✓", "success");
     } catch (err: unknown) {
-      setError(`Re-download failed: ${err instanceof Error ? err.message : String(err)}`);
+      addToast(`Re-download failed: ${err instanceof Error ? err.message : String(err)}`, "error");
     } finally {
       setRedownloading(null);
     }
   };
 
-  // ─────────────────────────────────────────────
-  // Layer toggle (with map preview)
-  // ─────────────────────────────────────────────
-
-  const toggleLayer = (slug: string) => {
-    const isSelected = selectedLayers.includes(slug);
-    setSelectedLayers((prev) => isSelected ? prev.filter((l) => l !== slug) : [...prev, slug]);
-
-    if (mapReady) {
-      if (isSelected) {
-        removeLayerPreview(slug);
-      } else {
-        addLayerPreview(slug);
-      }
+  const handleTopup = async (pack: typeof CREDIT_PACKS[0]) => {
+    try {
+      const r = await fetch(`${API_BASE}/payments/create-checkout-session`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: userId, amount: pack.credits,
+          redirect_url: `${window.location.origin}/credits?success=1`,
+          cancel_url: `${window.location.origin}/credits?canceled=1` }),
+      });
+      if (!r.ok) throw new Error(await r.text());
+      const d = await r.json();
+      window.location.href = d.checkout_url;
+    } catch (err: unknown) {
+      addToast(`Checkout failed: ${err instanceof Error ? err.message : String(err)}`, "error");
     }
   };
-
-  const toggleFormat = (fmt: string) =>
-    setSelectedFormats((prev) => prev.includes(fmt) ? prev.filter((f) => f !== fmt) : [...prev, fmt]);
-
-  const clearAoi = () => {
-    setAoi(null); setAoiCoords(null); setPreviewResults({}); setClipResult(null); setError(null);
-    const map = mapRef.current;
-    if (!map || !mapReady) return;
-    (map.getSource("aoi") as mapboxgl.GeoJSONSource)?.setData({ type: "FeatureCollection", features: [] });
-    (map.getSource("search-aoi") as mapboxgl.GeoJSONSource)?.setData({ type: "FeatureCollection", features: [] });
-  };
-
-  // ─────────────────────────────────────────────
-  // Derived values
-  // ─────────────────────────────────────────────
-
-  const totalEstimatedMb = Object.values(previewResults).reduce((s, r) => s + (r?.estimated_mb_geojson || 0), 0);
-  const totalFeatures = Object.values(previewResults).reduce((s, r) => s + (r?.feature_count || 0), 0);
-  const creditsNeeded = calculateCreditsNeeded();
 
   // ─────────────────────────────────────────────
   // Render
   // ─────────────────────────────────────────────
 
   return (
-    <div className="flex flex-col h-screen bg-gray-50">
+    <div className="flex flex-col h-screen bg-slate-100 select-none">
+
       {/* ── Header */}
-      <header className="bg-blue-700 text-white px-6 py-3 flex items-center justify-between shadow-md z-10">
-        <div>
-          <h1 className="text-lg font-bold">🇹🇭 Thai GeoData Hub</h1>
-          <p className="text-blue-200 text-xs">Select Area → Choose Layers → Download</p>
+      <header className="bg-slate-900 text-white flex items-center justify-between px-5 py-2.5 shadow-lg z-10 shrink-0">
+        <div className="flex items-center gap-3">
+          <span className="text-2xl">🇹🇭</span>
+          <div>
+            <h1 className="text-sm font-bold tracking-wide">Thai GeoData Hub</h1>
+            <p className="text-slate-400 text-xs">Open GIS data for Thailand</p>
+          </div>
         </div>
-        <div className="flex items-center gap-4">
-          {userId && (
-            <span className="text-blue-200 text-xs hidden sm:block truncate max-w-[160px]" title={userId}>{userId}</span>
-          )}
-          <CreditBadge balance={creditBalance.credits} onTopup={() => setShowTopup(true)} />
+
+        {/* API status pill */}
+        {apiOk === false && (
+          <div className="hidden sm:flex items-center gap-1.5 bg-red-900/60 text-red-300 text-xs px-3 py-1 rounded-full border border-red-700">
+            <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
+            Backend unreachable — set NEXT_PUBLIC_API_URL in Vercel
+          </div>
+        )}
+
+        <div className="flex items-center gap-3">
+          {userId && <span className="text-slate-400 text-xs hidden md:block truncate max-w-[180px]">{userId}</span>}
+          <div className="flex items-center gap-2 bg-slate-700 px-3 py-1.5 rounded-full text-sm">
+            <span className="text-yellow-400">💳</span>
+            <span className="font-semibold">{credits.toLocaleString()}</span>
+            <span className="text-slate-400 text-xs">cr</span>
+            <button onClick={() => setShowTopup(true)}
+              className="ml-1 bg-blue-600 hover:bg-blue-500 text-white text-xs px-2.5 py-0.5 rounded-full transition-colors font-medium">
+              + Buy
+            </button>
+          </div>
         </div>
       </header>
 
       <div className="flex flex-1 overflow-hidden">
-        {/* ── Sidebar */}
-        <aside className="w-80 bg-white border-r border-gray-200 flex flex-col shadow-lg overflow-hidden">
 
-          {/* ── Search */}
-          <div className="p-4 border-b border-gray-200 shrink-0">
-            <label className="text-xs font-semibold text-gray-500 uppercase mb-1 block">🔍 Search Thailand</label>
+        {/* ══ SIDEBAR ══ */}
+        <aside className="w-[300px] shrink-0 bg-white flex flex-col overflow-y-auto border-r border-slate-200 shadow-md">
+
+          {/* Search */}
+          <div className="p-3 border-b border-slate-200 bg-slate-50">
             <div className="flex gap-2">
               <input type="text" value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-                placeholder="e.g. Chiang Mai, กรุงเทพ..."
-                className="flex-1 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                placeholder="🔍 Search province, city…"
+                className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500" />
               <button onClick={handleSearch} disabled={searching}
-                className="bg-blue-600 text-white px-3 py-2 rounded text-sm hover:bg-blue-700 disabled:opacity-50">
+                className="bg-blue-600 text-white px-3 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 font-medium">
                 {searching ? "…" : "Go"}
               </button>
             </div>
             {searchResults.length > 0 && (
-              <ul className="mt-2 bg-gray-50 rounded border border-gray-200 max-h-40 overflow-y-auto">
+              <div className="absolute z-30 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl w-64 max-h-52 overflow-y-auto">
                 {searchResults.map((r, i) => (
-                  <li key={i} onClick={() => handleSelectSearchResult(r)}
-                    className="px-3 py-2 text-sm cursor-pointer hover:bg-blue-50 border-b border-gray-100 last:border-0 flex items-center justify-between">
+                  <button key={i} onClick={() => selectSearchResult(r)}
+                    className="w-full text-left px-3 py-2.5 text-sm hover:bg-blue-50 border-b border-slate-100 last:border-0 flex items-center justify-between">
                     <div>
-                      <p className="font-medium text-gray-800">{r.name_en}</p>
-                      <p className="text-xs text-gray-500">{r.name_th}</p>
+                      <p className="font-semibold text-slate-800">{r.name_en}</p>
+                      <p className="text-xs text-slate-500">{r.name_th}</p>
                     </div>
-                    <span className="text-xs bg-gray-200 text-gray-600 px-2 py-0.5 rounded">{r.type}</span>
-                  </li>
+                    <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full ml-2 shrink-0">{r.type}</span>
+                  </button>
                 ))}
-              </ul>
+              </div>
             )}
           </div>
 
-          {/* ── Tabs */}
-          <div className="flex border-b border-gray-200 shrink-0">
-            {(["layers", "downloads"] as const).map((tab) => (
-              <button key={tab} onClick={() => setActiveTab(tab)}
-                className={`flex-1 py-2.5 text-xs font-semibold uppercase tracking-wide transition-colors ${
-                  activeTab === tab
-                    ? "border-b-2 border-blue-600 text-blue-600"
-                    : "text-gray-500 hover:text-gray-700"}`}>
-                {tab === "layers" ? "📂 Layers" : "📋 My Downloads"}
-              </button>
-            ))}
+          {/* ── SECTION: LAYERS */}
+          <div>
+            <SectionHeader label="📂 Layers" open={openSections.layers} onToggle={() => toggleSection("layers")} />
+            {openSections.layers && (
+              <div className="p-3 space-y-1">
+                <p className="text-xs text-slate-400 mb-2">Check a layer to see it on the map and include in export.</p>
+                {layers.map((layer) => {
+                  const checked = selectedLayers.includes(layer.slug);
+                  const loading = loadingLayerSlug === layer.slug;
+                  const hasError = Boolean(layerErrors[layer.slug]);
+                  const isOnMap = visibleOnMap.current.has(layer.slug);
+                  return (
+                    <label key={layer.slug}
+                      className={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg cursor-pointer transition-colors border ${
+                        checked ? "bg-blue-50 border-blue-200" : hasError ? "bg-red-50 border-red-200" : "border-transparent hover:bg-slate-50"
+                      }`}>
+                      <input type="checkbox" checked={checked}
+                        onChange={() => toggleLayer(layer.slug)}
+                        className="w-4 h-4 rounded accent-blue-600 shrink-0" />
+                      <LayerSymbol slug={layer.slug} geomType={layer.geom_type} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold text-slate-800 truncate">{layer.name_en}</p>
+                        <p className="text-xs text-slate-400 truncate">{layer.name_th}</p>
+                      </div>
+                      <div className="shrink-0 flex items-center gap-1">
+                        {loading && <span className="text-xs text-blue-500 animate-pulse">●</span>}
+                        {!loading && isOnMap && <span className="text-xs" title="Visible on map">🗺</span>}
+                        {hasError && <span className="text-xs" title={layerErrors[layer.slug]}>⚠️</span>}
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
-          {/* ── Layers Tab */}
-          {activeTab === "layers" && (
-            <div className="flex-1 overflow-y-auto flex flex-col">
+          {/* ── SECTION: AOI */}
+          <div className="border-t border-slate-200">
+            <SectionHeader label="✏️ Area of Interest" open={openSections.aoi} onToggle={() => toggleSection("aoi")} />
+            {openSections.aoi && (
+              <div className="p-3 space-y-2">
+                {/* Draw button */}
+                <button
+                  onClick={() => { clearAoi(); }}
+                  className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border-2 text-sm font-semibold transition-all ${
+                    isDrawing
+                      ? "border-blue-500 bg-blue-500 text-white animate-pulse"
+                      : aoi
+                      ? "border-slate-200 bg-slate-50 text-slate-600 hover:border-blue-400"
+                      : "border-blue-500 bg-blue-500 text-white hover:bg-blue-600"
+                  }`}>
+                  {isDrawing ? "✏️ Drawing… (double-click to close, Esc cancel)" : aoi ? "✏️ Redraw Polygon" : "✏️ Draw Polygon on Map"}
+                </button>
 
-              {/* Layer selection */}
-              <div className="p-4 border-b border-gray-200">
-                <div className="flex items-center justify-between mb-2">
-                  <label className="text-xs font-semibold text-gray-500 uppercase">Layers</label>
-                  <span className="text-xs text-gray-400">Click map to preview</span>
-                </div>
-                <div className="space-y-1.5">
-                  {layers.map((layer) => {
-                    const isSelected = selectedLayers.includes(layer.slug);
-                    const isLoadingPreview = loadingPreviewSlug === layer.slug;
-                    const hasPreview = previewLayersOnMap.current.has(layer.slug);
-                    const dotColor = PREVIEW_COLORS[layer.slug] || "#888";
-                    return (
-                      <label key={layer.slug}
-                        className={`flex items-center gap-3 p-2 rounded border cursor-pointer transition ${
-                          isSelected ? "border-blue-500 bg-blue-50" : "border-gray-200 hover:border-blue-300"}`}>
-                        <input type="checkbox" checked={isSelected} onChange={() => toggleLayer(layer.slug)}
-                          className="w-4 h-4 text-blue-600 rounded shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-gray-800 truncate">{layer.name_en}</p>
-                          <p className="text-xs text-gray-500 truncate">{layer.name_th}</p>
-                        </div>
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          {isLoadingPreview && <span className="text-xs animate-spin">⏳</span>}
-                          {!isLoadingPreview && hasPreview && (
-                            <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ background: dotColor }} title="Visible on map" />
-                          )}
-                          <span className="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">{layer.geom_type}</span>
-                        </div>
-                      </label>
-                    );
-                  })}
-                </div>
+                {/* File upload */}
+                <button onClick={() => fileInputRef.current?.click()}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border-2 border-slate-200 bg-white text-slate-700 text-sm font-semibold hover:border-blue-400 hover:bg-blue-50 transition-all">
+                  📂 Upload KML / GeoJSON
+                </button>
+                <input ref={fileInputRef} type="file" accept=".kml,.geojson,.json"
+                  onChange={handleFileUpload} className="hidden" />
+
+                {/* AOI status */}
+                {aoi && (
+                  <div className="flex items-start gap-2 p-3 bg-green-50 border border-green-200 rounded-lg">
+                    <span className="text-green-600 mt-0.5">✓</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold text-green-700">AOI Active</p>
+                      <p className="text-xs text-green-600">Source: {aoiSource === "file" ? "Uploaded file" : "Drawn on map"}</p>
+                    </div>
+                    <button onClick={clearAoi}
+                      className="text-xs text-red-500 hover:text-red-700 font-semibold shrink-0 px-1.5 py-0.5 rounded hover:bg-red-50">
+                      Clear
+                    </button>
+                  </div>
+                )}
+
+                {isDrawing && !aoi && (
+                  <div className="p-2.5 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-700">
+                    <p className="font-semibold mb-0.5">Drawing mode active</p>
+                    <p>• Click to add vertices</p>
+                    <p>• Double-click to close polygon</p>
+                    <p>• <kbd className="bg-blue-100 px-1 rounded">Esc</kbd> to cancel</p>
+                  </div>
+                )}
               </div>
+            )}
+          </div>
 
-              {/* Format selection */}
-              <div className="p-4 border-b border-gray-200">
-                <label className="text-xs font-semibold text-gray-500 uppercase mb-2 block">📦 Formats</label>
-                <div className="space-y-1.5">
-                  {FORMAT_OPTIONS.map((fmt) => (
-                    <label key={fmt.value}
-                      className={`flex items-center gap-3 p-2 rounded border cursor-pointer transition ${
-                        selectedFormats.includes(fmt.value) ? "border-blue-500 bg-blue-50" : "border-gray-200"}`}>
-                      <input type="checkbox" checked={selectedFormats.includes(fmt.value)} onChange={() => toggleFormat(fmt.value)}
-                        className="w-4 h-4 shrink-0" />
-                      <span className="text-sm">{fmt.icon} {fmt.label}</span>
-                    </label>
+          {/* ── SECTION: EXPORT */}
+          <div className="border-t border-slate-200">
+            <SectionHeader label="📥 Export" open={openSections.export} onToggle={() => toggleSection("export")} />
+            {openSections.export && (
+              <div className="p-3 space-y-3">
+                {/* Format selection */}
+                <div>
+                  <p className="text-xs font-semibold text-slate-500 uppercase mb-2">Output Formats</p>
+                  <div className="flex gap-2 flex-wrap">
+                    {FORMAT_OPTIONS.map((f) => (
+                      <label key={f.value}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border cursor-pointer text-xs font-medium transition-colors ${
+                          selectedFormats.includes(f.value)
+                            ? "bg-blue-600 border-blue-600 text-white"
+                            : "border-slate-200 text-slate-700 hover:border-blue-400"
+                        }`}>
+                        <input type="checkbox" checked={selectedFormats.includes(f.value)}
+                          onChange={() => setSelectedFormats((p) => p.includes(f.value) ? p.filter((x) => x !== f.value) : [...p, f.value])}
+                          className="sr-only" />
+                        {f.label}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Calculate cost */}
+                <button onClick={handlePreview}
+                  disabled={!aoi || selectedLayers.length === 0 || loadingPreview}
+                  className="w-full py-2 bg-slate-700 text-white text-sm font-semibold rounded-lg hover:bg-slate-600 disabled:opacity-40 transition-colors">
+                  {loadingPreview ? "⏳ Calculating…" : "🧮 Calculate Cost"}
+                </button>
+
+                {/* Preview results */}
+                {Object.keys(previewResults).length > 0 && (
+                  <div className="bg-slate-50 rounded-lg border border-slate-200 overflow-hidden">
+                    <div className="divide-y divide-slate-100">
+                      {Object.entries(previewResults).map(([slug, r]) => (
+                        <div key={slug} className="flex items-center justify-between px-3 py-1.5">
+                          <div className="flex items-center gap-2">
+                            <LayerSymbol slug={slug} geomType={layers.find((l) => l.slug === slug)?.geom_type || ""} size={12} />
+                            <span className="text-xs text-slate-700">{slug}</span>
+                          </div>
+                          {r.error
+                            ? <span className="text-xs text-red-500">No data</span>
+                            : <span className="text-xs text-slate-500">{(r.feature_count || 0).toLocaleString()} ft</span>
+                          }
+                        </div>
+                      ))}
+                    </div>
+                    <div className="px-3 py-2 bg-slate-100 border-t border-slate-200 space-y-0.5">
+                      <div className="flex justify-between text-xs text-slate-600">
+                        <span>Total features</span><span className="font-semibold">{totalFeatures.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between text-xs text-slate-600">
+                        <span>Est. size</span><span className="font-semibold">{totalMb.toFixed(2)} MB</span>
+                      </div>
+                      <div className={`flex justify-between text-xs font-bold ${creditsNeeded > 0 ? "text-blue-700" : "text-green-700"}`}>
+                        <span>Cost</span>
+                        <span>{creditsNeeded > 0 ? `${creditsNeeded} credits` : "Free"}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Download button */}
+                <button onClick={handleDownload}
+                  disabled={!aoi || selectedLayers.length === 0 || selectedFormats.length === 0 || Object.keys(previewResults).length === 0}
+                  className="w-full py-3 bg-green-600 text-white text-sm font-bold rounded-lg hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm">
+                  {Object.keys(previewResults).length === 0
+                    ? "📥 Run Calculate Cost first"
+                    : creditsNeeded > credits
+                    ? `⚠️ Need ${creditsNeeded} cr (you have ${credits})`
+                    : `📥 Download${creditsNeeded > 0 ? ` (${creditsNeeded} cr)` : " — Free"}`}
+                </button>
+
+                {lastClip && (
+                  <div className="p-2.5 bg-green-50 border border-green-200 rounded-lg text-xs text-green-700">
+                    <p className="font-semibold">✓ Download ready!</p>
+                    <p className="truncate text-green-600 mt-0.5">{lastClip.filename}</p>
+                    <p className="text-green-500">{lastClip.size_mb} MB · {lastClip.total_features.toLocaleString()} features</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* ── SECTION: HISTORY */}
+          <div className="border-t border-slate-200">
+            <button onClick={() => { toggleSection("history"); if (!openSections.history) fetchHistory(); }}
+              className="w-full flex items-center justify-between px-4 py-2.5 bg-slate-800 text-white text-xs font-bold uppercase tracking-widest hover:bg-slate-700 transition-colors select-none">
+              <span>📋 Download History</span>
+              <span className={`transition-transform duration-200 ${openSections.history ? "rotate-180" : ""}`}>▾</span>
+            </button>
+            {openSections.history && (
+              <div className="p-3">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-xs text-slate-500">{history.length} records</span>
+                  <button onClick={fetchHistory} disabled={historyLoading}
+                    className="text-xs text-blue-600 hover:underline disabled:opacity-50">
+                    {historyLoading ? "…" : "↺ Refresh"}
+                  </button>
+                </div>
+
+                {history.length === 0 && !historyLoading && (
+                  <div className="text-center py-6 text-slate-400">
+                    <p className="text-2xl mb-1">📭</p>
+                    <p className="text-xs">No downloads yet</p>
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  {history.map((rec) => (
+                    <div key={rec.download_id} className="border border-slate-200 rounded-xl p-2.5 bg-white hover:border-blue-300 transition-colors">
+                      <div className="flex gap-2">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-semibold text-slate-700 truncate">{rec.filename}</p>
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {rec.layers.slice(0, 3).map((l) => (
+                              <span key={l} className="text-xs px-1.5 py-0.5 rounded" style={{ background: (LAYER_COLORS[l] || "#888") + "20", color: LAYER_COLORS[l] || "#888" }}>
+                                {l}
+                              </span>
+                            ))}
+                            {rec.layers.length > 3 && <span className="text-xs text-slate-400">+{rec.layers.length - 3}</span>}
+                          </div>
+                          <p className="text-xs text-slate-400 mt-1">
+                            {rec.size_mb} MB · {new Date(rec.created_at).toLocaleDateString()}
+                            {rec.credits_used > 0 && ` · ${rec.credits_used} cr`}
+                          </p>
+                        </div>
+                        <button onClick={() => handleRedownload(rec)}
+                          disabled={!rec.s3_key || redownloading === rec.download_id}
+                          title={rec.s3_key ? "Re-download for free" : "File expired"}
+                          className={`shrink-0 self-start mt-0.5 px-2 py-1 text-xs rounded-lg font-semibold transition-colors ${
+                            rec.s3_key
+                              ? "bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+                              : "bg-slate-100 text-slate-400 cursor-not-allowed"
+                          }`}>
+                          {redownloading === rec.download_id ? "…" : rec.s3_key ? "↓" : "–"}
+                        </button>
+                      </div>
+                    </div>
                   ))}
                 </div>
               </div>
+            )}
+          </div>
 
-              {/* AOI status */}
-              <div className="p-4 border-b border-gray-200">
-                {aoi ? (
-                  <div className="mb-3 p-3 bg-blue-50 rounded border border-blue-200">
-                    <p className="text-sm text-blue-700 font-medium">✅ AOI Selected</p>
-                    <p className="text-xs text-blue-500 mt-1">{((aoiCoords?.[0]?.length ?? 1) - 1)} vertices</p>
-                  </div>
-                ) : (
-                  <p className="text-xs text-gray-400 mb-3">Click on the map to draw a polygon AOI</p>
-                )}
-                <div className="flex gap-2">
-                  <button onClick={handlePreview} disabled={!aoi || selectedLayers.length === 0 || loadingPreview}
-                    className="flex-1 bg-gray-100 text-gray-700 py-2 rounded text-sm hover:bg-gray-200 disabled:opacity-50">
-                    {loadingPreview ? "⏳ Calculating…" : "🔍 Preview Count"}
-                  </button>
-                  {aoi && (
-                    <button onClick={clearAoi} className="px-3 py-2 bg-red-50 text-red-600 rounded text-sm hover:bg-red-100">✕</button>
-                  )}
-                </div>
-              </div>
+          {/* Bottom padding */}
+          <div className="h-4 shrink-0" />
+        </aside>
 
-              {/* Preview results */}
-              {Object.keys(previewResults).length > 0 && (
-                <div className="p-4 border-b border-gray-200 bg-yellow-50">
-                  <label className="text-xs font-semibold text-yellow-700 uppercase mb-2 block">📊 AOI Preview</label>
-                  <div className="space-y-1.5">
-                    {Object.entries(previewResults).map(([slug, result]) => (
-                      <div key={slug} className="bg-white rounded border p-2">
-                        <p className="text-sm font-medium text-gray-800">{slug}</p>
-                        <p className="text-xs text-gray-500">{(result.feature_count || 0).toLocaleString()} features</p>
-                        {result.estimated_mb_geojson !== undefined && (
-                          <p className="text-xs text-gray-400">~{(result.estimated_mb_geojson || 0).toFixed(2)} MB</p>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                  <div className="mt-3 p-2 bg-yellow-100 rounded text-xs space-y-1">
-                    <div className="flex justify-between"><span>Total features:</span><span className="font-semibold">{totalFeatures.toLocaleString()}</span></div>
-                    <div className="flex justify-between"><span>Est. size:</span><span className="font-semibold">~{totalEstimatedMb.toFixed(2)} MB</span></div>
-                    {creditsNeeded > 0 && (
-                      <div className="flex justify-between text-blue-700"><span>Credits needed:</span><span className="font-bold">{creditsNeeded}</span></div>
-                    )}
-                  </div>
-                </div>
-              )}
+        {/* ══ MAP ══ */}
+        <main className="flex-1 relative overflow-hidden">
+          <div ref={mapContainer} className="absolute inset-0" />
 
-              {/* Download section */}
-              <div className="p-4 mt-auto">
-                {error && (
-                  <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-xs flex gap-2">
-                    <span>⚠️</span><span>{error}</span>
-                  </div>
-                )}
-                {clipResult && (
-                  <div className="mb-3 p-3 bg-green-50 border border-green-200 rounded text-green-700 text-xs">
-                    <p className="font-semibold">✅ Download started!</p>
-                    <p className="text-green-600 mt-1 truncate">{clipResult.filename}</p>
-                    <p className="text-green-500">{clipResult.size_mb} MB · {clipResult.total_features.toLocaleString()} features</p>
-                    {(clipResult.credits_used ?? 0) > 0 && (
-                      <p className="text-green-400 mt-0.5">−{clipResult.credits_used} credits</p>
-                    )}
-                  </div>
-                )}
-                <button onClick={handleDownloadClick}
-                  disabled={!aoi || selectedLayers.length === 0 || selectedFormats.length === 0}
-                  className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition text-sm">
-                  📥 {aoi ? `Download (${creditsNeeded} cr)` : "Draw AOI First"}
-                </button>
-                <p className="text-xs text-gray-400 mt-2 text-center">
-                  {selectedLayers.length} layer(s) · {selectedFormats.length} format(s)
-                </p>
+          {!mapReady && (
+            <div className="absolute inset-0 flex items-center justify-center bg-slate-100 z-10">
+              <div className="text-center text-slate-500">
+                <div className="text-5xl mb-3 animate-spin">🌏</div>
+                <p className="font-semibold">Loading map…</p>
               </div>
             </div>
           )}
 
-          {/* ── Downloads Tab */}
-          {activeTab === "downloads" && (
-            <div className="flex-1 overflow-y-auto p-4">
-              <div className="flex items-center justify-between mb-3">
-                <label className="text-xs font-semibold text-gray-500 uppercase">Download History</label>
-                <button onClick={fetchHistory} disabled={historyLoading}
-                  className="text-xs text-blue-600 hover:underline disabled:opacity-50">
-                  {historyLoading ? "Loading…" : "↺ Refresh"}
-                </button>
-              </div>
-
-              {error && (
-                <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-xs">
-                  ⚠️ {error}
-                </div>
-              )}
-
-              {!historyLoading && downloadHistory.length === 0 && (
-                <div className="text-center py-10 text-gray-400">
-                  <p className="text-3xl mb-2">📭</p>
-                  <p className="text-sm font-medium">No downloads yet</p>
-                  <p className="text-xs mt-1">Draw an AOI and download data to see history here.</p>
-                </div>
-              )}
-
-              <div className="space-y-3">
-                {downloadHistory.map((record) => {
-                  const date = new Date(record.created_at).toLocaleDateString("en-GB", {
-                    day: "2-digit", month: "short", year: "numeric",
-                  });
-                  const hasS3 = Boolean(record.s3_key);
+          {/* Layer legend overlay */}
+          {mapReady && visibleOnMap.current.size > 0 && (
+            <div className="absolute bottom-8 right-4 z-10 bg-white/90 backdrop-blur-sm rounded-xl shadow-lg p-3 min-w-[140px]">
+              <p className="text-xs font-bold text-slate-600 uppercase mb-2 tracking-wide">Legend</p>
+              <div className="space-y-1.5">
+                {Array.from(visibleOnMap.current).map((slug) => {
+                  const meta = layers.find((l) => l.slug === slug);
                   return (
-                    <div key={record.download_id}
-                      className="border border-gray-200 rounded-xl p-3 bg-white hover:border-blue-300 transition">
-                      <div className="flex items-start gap-2">
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-semibold text-gray-800 truncate" title={record.filename}>
-                            {record.filename}
-                          </p>
-                          <div className="flex flex-wrap gap-1 mt-1">
-                            {record.layers.map((l) => (
-                              <span key={l} className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">{l}</span>
-                            ))}
-                          </div>
-                          <p className="text-xs text-gray-400 mt-1">
-                            {record.size_mb} MB · {record.total_features?.toLocaleString() ?? 0} features · {date}
-                          </p>
-                          {record.credits_used > 0 && (
-                            <p className="text-xs text-blue-500">−{record.credits_used} credits</p>
-                          )}
-                        </div>
-                        <button
-                          onClick={() => handleRedownload(record)}
-                          disabled={!hasS3 || redownloading === record.download_id}
-                          title={!hasS3 ? "File no longer available in cloud storage" : "Re-download for free"}
-                          className={`shrink-0 px-2.5 py-1.5 text-xs rounded-lg font-medium transition ${
-                            hasS3
-                              ? "bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
-                              : "bg-gray-100 text-gray-400 cursor-not-allowed"}`}>
-                          {redownloading === record.download_id ? "…" : hasS3 ? "↓ Download" : "Expired"}
-                        </button>
-                      </div>
+                    <div key={slug} className="flex items-center gap-2">
+                      <LayerSymbol slug={slug} geomType={meta?.geom_type || "linestring"} size={14} />
+                      <span className="text-xs text-slate-700">{meta?.name_en || slug}</span>
                     </div>
                   );
                 })}
               </div>
             </div>
           )}
-        </aside>
 
-        {/* ── Map */}
-        <main ref={mapContainer} className="flex-1 relative">
-          {!mapReady && (
-            <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
-              <div className="text-center text-gray-500">
-                <div className="text-5xl mb-4 animate-spin">🌏</div>
-                <p className="font-medium">Loading map engine…</p>
-              </div>
-            </div>
-          )}
-          {mapReady && (
-            <div className="absolute top-4 left-4 z-10 bg-white/90 backdrop-blur-sm rounded-xl shadow-lg p-3 text-xs max-w-[180px]">
-              <p className="font-semibold text-gray-700 mb-1">🖱️ Draw AOI</p>
-              <ol className="text-gray-500 space-y-0.5">
-                <li>1. Click to add vertices</li>
-                <li>2. Double-click to close</li>
-                <li>3. Esc to cancel</li>
-              </ol>
-              {previewLayersOnMap.current.size > 0 && (
-                <div className="mt-2 pt-2 border-t border-gray-200">
-                  <p className="font-semibold text-gray-600 mb-1">Map Layers:</p>
-                  <div className="space-y-0.5">
-                    {Array.from(previewLayersOnMap.current).map((slug) => (
-                      <div key={slug} className="flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full inline-block shrink-0"
-                          style={{ background: PREVIEW_COLORS[slug] || "#888" }} />
-                        <span className="text-gray-600 truncate">{slug}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+          {/* Drawing hint */}
+          {isDrawing && (
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 bg-blue-600 text-white text-xs font-semibold px-4 py-2 rounded-full shadow-lg flex items-center gap-2 animate-pulse">
+              ✏️ Click to add points · Double-click to finish · Esc to cancel
             </div>
           )}
         </main>
       </div>
 
-      {/* ── Modals */}
-      {showEmailModal && <EmailModal onSubmit={handleEmailSubmit} />}
-      {downloading && <Spinner message="Preparing your download…" />}
+      {/* ══ TOAST NOTIFICATIONS ══ */}
+      <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2 pointer-events-none">
+        {toasts.map((t) => (
+          <div key={t.id}
+            className={`px-4 py-2.5 rounded-xl shadow-xl text-sm font-medium max-w-xs pointer-events-auto transition-all ${
+              t.type === "error" ? "bg-red-600 text-white" :
+              t.type === "success" ? "bg-green-600 text-white" :
+              "bg-slate-800 text-white"}`}>
+            {t.msg}
+          </div>
+        ))}
+      </div>
+
+      {/* ══ MODALS ══ */}
+
+      {/* Email modal */}
+      {showEmailModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-7">
+            <div className="text-center mb-5">
+              <div className="text-4xl mb-2">🇹🇭</div>
+              <h2 className="text-xl font-bold text-slate-800">Welcome to Thai GeoData Hub</h2>
+              <p className="text-slate-500 text-sm mt-1">Enter your email to track downloads & credits</p>
+            </div>
+            <EmailForm onSubmit={(email) => {
+              localStorage.setItem("geodata_email", email);
+              setUserId(email);
+              setShowEmailModal(false);
+            }} />
+          </div>
+        </div>
+      )}
+
+      {/* Confirm download */}
       {showConfirm && (
-        <ConfirmModal
-          creditsNeeded={creditsNeeded}
-          userCredits={creditBalance.credits}
-          onConfirm={() => executeDownload(creditsNeeded)}
-          onCancel={() => setShowConfirm(false)}
-        />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6">
+            <h2 className="text-lg font-bold text-slate-800 mb-4">Confirm Download</h2>
+            <div className="bg-slate-50 rounded-xl p-4 mb-4 space-y-1.5 text-sm">
+              <div className="flex justify-between"><span className="text-slate-600">Layers</span><span className="font-semibold">{selectedLayers.join(", ")}</span></div>
+              <div className="flex justify-between"><span className="text-slate-600">Features</span><span className="font-semibold">{totalFeatures.toLocaleString()}</span></div>
+              <div className="flex justify-between"><span className="text-slate-600">Credits</span><span className="font-bold text-blue-600">−{creditsNeeded}</span></div>
+              <div className="flex justify-between"><span className="text-slate-600">Balance after</span><span className={`font-bold ${credits >= creditsNeeded ? "text-green-600" : "text-red-600"}`}>{credits - creditsNeeded}</span></div>
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => setShowConfirm(false)} className="flex-1 py-2.5 bg-slate-100 text-slate-700 rounded-xl font-semibold hover:bg-slate-200 transition-colors">Cancel</button>
+              <button onClick={executeDownload} className="flex-1 py-2.5 bg-green-600 text-white rounded-xl font-semibold hover:bg-green-700 transition-colors">Download</button>
+            </div>
+          </div>
+        </div>
       )}
+
+      {/* Top-up modal */}
       {showTopup && (
-        <TopupModal
-          packs={CREDIT_PACKS}
-          onSelect={handleTopupSelect}
-          onClose={() => setShowTopup(false)}
-          loading={topupLoading}
-        />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-lg font-bold text-slate-800">Buy Credits</h2>
+              <button onClick={() => setShowTopup(false)} className="text-slate-400 hover:text-slate-700 text-2xl leading-none">×</button>
+            </div>
+            <div className="space-y-3">
+              {CREDIT_PACKS.map((p) => (
+                <button key={p.credits} onClick={() => handleTopup(p)}
+                  className={`w-full flex items-center justify-between p-4 rounded-xl border-2 transition-all hover:shadow-md ${
+                    p.popular ? "border-blue-500 bg-blue-50" : "border-slate-200 hover:border-blue-300"}`}>
+                  <div className="text-left">
+                    <p className="font-bold text-slate-800">{p.label}</p>
+                    <p className="text-sm text-slate-500">{p.credits.toLocaleString()} credits</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-bold text-blue-600">฿{p.price_thb.toLocaleString()}</p>
+                    {p.popular && <span className="text-xs bg-blue-600 text-white px-2 py-0.5 rounded-full">Popular</span>}
+                  </div>
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-slate-400 mt-4 text-center">Secure checkout via Stripe</p>
+          </div>
+        </div>
       )}
+
+      {downloading && <Spinner message="Clipping & packaging your data…" />}
     </div>
+  );
+}
+
+// ─────────────────────────────────────────────
+// Email form (split out to keep main component clean)
+// ─────────────────────────────────────────────
+
+function EmailForm({ onSubmit }: { onSubmit: (email: string) => void }) {
+  const [email, setEmail] = React.useState("");
+  const [err, setErr] = React.useState("");
+  return (
+    <form onSubmit={(e) => {
+      e.preventDefault();
+      const t = email.trim().toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(t)) { setErr("Enter a valid email address."); return; }
+      onSubmit(t);
+    }} className="space-y-3">
+      <input type="email" value={email} onChange={(e) => { setEmail(e.target.value); setErr(""); }}
+        placeholder="you@email.com" autoFocus
+        className="w-full border border-slate-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+      {err && <p className="text-red-500 text-xs">{err}</p>}
+      <button type="submit"
+        className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold hover:bg-blue-700 transition-colors">
+        Start Exploring →
+      </button>
+      <p className="text-xs text-slate-400 text-center">No password. Your email is your account ID.</p>
+    </form>
   );
 }

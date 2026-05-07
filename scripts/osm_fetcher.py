@@ -39,7 +39,9 @@ LAYER_METADATA = {
     "buildings":  {"slug": "buildings",  "name_en": "Buildings",                  "name_th": "อาคาร/สิ่งปลูกสร้าง",   "geom_type": "Polygon"},
     "landuse":    {"slug": "landuse",    "name_en": "Land Use",                   "name_th": "การใช้ประโยชน์ที่ดิน",   "geom_type": "Polygon"},
     "natural":    {"slug": "natural",    "name_en": "Natural Features",           "name_th": "ลักษณะทางธรรมชาติ",    "geom_type": "Polygon"},
-    "pois":       {"slug": "pois",       "name_en": "Points of Interest",         "name_th": "สถานที่สำคัญ",          "geom_type": "Point"},
+    "parks":      {"slug": "parks",      "name_en": "National Parks",              "name_th": "อุทยานแห่งชาติ",          "geom_type": "Polygon"},
+    "temples":    {"slug": "temples",    "name_en": "Temples & Shrines",           "name_th": "วัด/ศาสนสถาน",           "geom_type": "Point"},
+    "pois":       {"slug": "pois",       "name_en": "Points of Interest",          "name_th": "สถานที่สำคัญ",            "geom_type": "Point"},
     "province":   {"slug": "province",   "name_en": "Province Boundaries",       "name_th": "ขอบเขตจังหวัด",        "geom_type": "Polygon"},
     "amphoe":     {"slug": "amphoe",     "name_en": "District Boundaries",       "name_th": "ขอบเขตอำเภอ",          "geom_type": "Polygon"},
     "tambon":     {"slug": "tambon",     "name_en": "Sub-district Boundaries",   "name_th": "ขอบเขตตำบล",           "geom_type": "Polygon"},
@@ -106,6 +108,26 @@ OVERPASS_QUERIES = {
       relation["natural"~"water|forest|wood|beach|wetland|grassland|scrub"]({thai_bbox_str()});
     );
     out body geom;
+    """,
+    "parks": f"""
+    [out:json][timeout:{TIMEOUT}];
+    (
+      relation["boundary"="national_park"]({thai_bbox_str()});
+      relation["boundary"="protected_area"]({thai_bbox_str()});
+      relation["leisure"="nature_reserve"]({thai_bbox_str()});
+      way["boundary"="national_park"]({thai_bbox_str()});
+      way["leisure"="nature_reserve"]({thai_bbox_str()});
+    );
+    out body geom;
+    """,
+    "temples": f"""
+    [out:json][timeout:{TIMEOUT}];
+    (
+      node["amenity"="place_of_worship"]["religion"="buddhist"]({thai_bbox_str()});
+      node["amenity"="place_of_worship"]["religion"="hindu"]({thai_bbox_str()});
+      node["historic"="wayside_shrine"]({thai_bbox_str()});
+    );
+    out body;
     """,
     "pois": f"""
     [out:json][timeout:{TIMEOUT}];
@@ -341,6 +363,26 @@ def process_natural(records: list[dict]) -> list[dict]:
     return records
 
 
+def process_parks(records: list[dict]) -> list[dict]:
+    for rec in records:
+        tags = json.loads(rec.get("tags", "{}")) if isinstance(rec.get("tags"), str) else rec.get("tags", {})
+        rec["park_type"]  = tags.get("boundary") or tags.get("leisure", "unknown")
+        rec["protect_class"] = tags.get("protect_class", "")
+        rec["operator"]   = tags.get("operator", "")
+        rec.pop("tags", None)
+    return records
+
+
+def process_temples(records: list[dict]) -> list[dict]:
+    for rec in records:
+        tags = json.loads(rec.get("tags", "{}")) if isinstance(rec.get("tags"), str) else rec.get("tags", {})
+        rec["religion"]   = tags.get("religion", "buddhist")
+        rec["denomination"]= tags.get("denomination", "")
+        rec["operator"]   = tags.get("operator", "")
+        rec.pop("tags", None)
+    return records
+
+
 def parse_pois(data: dict) -> list[dict]:
     """Parse Overpass node elements → POI records with Point geometry."""
     from shapely.geometry import Point
@@ -447,9 +489,9 @@ def compute_bbox(records: list[dict]) -> tuple | None:
 # Main fetch pipeline
 # ─────────────────────────────────────────────
 
-ADMIN_LAYERS  = {"province", "amphoe", "tambon"}
-POI_LAYERS    = {"pois"}
-POLYGON_LAYERS = {"landuse", "natural"}  # way or relation, needs polygon reconstruction
+ADMIN_LAYERS   = {"province", "amphoe", "tambon"}
+POI_LAYERS     = {"pois", "temples"}
+POLYGON_LAYERS = {"landuse", "natural", "parks"}  # mixed way+relation, needs polygon reconstruction
 
 
 def fetch_layer(layer_slug: str) -> bool:
@@ -460,6 +502,8 @@ def fetch_layer(layer_slug: str) -> bool:
         "buildings": process_buildings,
         "landuse":   process_landuse,
         "natural":   process_natural,
+        "parks":     process_parks,
+        "temples":   process_temples,
         "pois":      lambda r: r,   # pois already processed in parse_pois
         "province":  process_admin,
         "amphoe":    process_admin,
@@ -487,7 +531,11 @@ def fetch_layer(layer_slug: str) -> bool:
         if layer_slug in ADMIN_LAYERS:
             records = parse_admin_relations(data)
         elif layer_slug in POI_LAYERS:
-            records = parse_pois(data)
+            if layer_slug == "temples":
+                # temples use parse_pois logic (they are nodes)
+                records = parse_pois(data)
+            else:
+                records = parse_pois(data)
         elif layer_slug in POLYGON_LAYERS:
             # For landuse/natural: ways → polygon, relations → polygon via linemerge
             way_records = parse_osm_elements(data)
@@ -531,11 +579,11 @@ def fetch_layer(layer_slug: str) -> bool:
 
 
 ALL_LAYERS = ["roads", "waterways", "railways", "buildings", "landuse", "natural",
-              "pois", "province", "amphoe", "tambon"]
+              "parks", "temples", "pois", "province", "amphoe", "tambon"]
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Thai GeoData Hub — OSM Fetcher")
-    parser.add_argument("--layer", choices=ALL_LAYERS + ["all"], required=True)
+    parser.add_argument("--layer", choices=ALL_LAYERS + ["all"], required=True, metavar="LAYER")
     parser.add_argument("--ensure-schema", action="store_true", help="No-op for file-based mode")
     args = parser.parse_args()
 
