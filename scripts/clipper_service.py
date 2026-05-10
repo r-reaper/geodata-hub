@@ -22,6 +22,9 @@ import pandas as pd
 from shapely.geometry import mapping, shape
 from shapely.ops import unary_union
 
+# Attribution / license file builders embedded in every ZIP
+from attribution import build_attribution_text, build_license_text, build_readme_text
+
 # S3 storage integration — graceful degradation when boto3 unavailable
 S3_AVAILABLE = False
 upload_file_to_s3 = None
@@ -48,19 +51,25 @@ log = logging.getLogger(__name__)
 DATA_DIR = Path(__file__).parent.parent / "data"
 
 LAYER_METADATA = {
-    "roads":     {"slug": "roads",     "name_en": "Road Network",            "name_th": "เส้นทางจราจร",        "geom_type": "Linestring"},
-    "waterways": {"slug": "waterways", "name_en": "Waterways",                "name_th": "แหล่งน้ำ",              "geom_type": "Linestring"},
-    "railways":  {"slug": "railways",  "name_en": "Railways",                 "name_th": "ทางรถไฟ",              "geom_type": "Linestring"},
-    "buildings": {"slug": "buildings", "name_en": "Buildings",                "name_th": "อาคาร/สิ่งปลูกสร้าง",   "geom_type": "Polygon"},
-    "landuse":   {"slug": "landuse",   "name_en": "Land Use",                 "name_th": "การใช้ประโยชน์ที่ดิน",   "geom_type": "Polygon"},
-    "natural":   {"slug": "natural",   "name_en": "Natural Features",         "name_th": "ลักษณะทางธรรมชาติ",    "geom_type": "Polygon"},
-    "parks":     {"slug": "parks",     "name_en": "National Parks",            "name_th": "อุทยานแห่งชาติ",          "geom_type": "Polygon"},
-    "temples":   {"slug": "temples",   "name_en": "Temples & Shrines",         "name_th": "วัด/ศาสนสถาน",           "geom_type": "Point"},
-    "pois":      {"slug": "pois",      "name_en": "Points of Interest",        "name_th": "สถานที่สำคัญ",            "geom_type": "Point"},
-    "province":  {"slug": "province",  "name_en": "Province Boundaries",     "name_th": "ขอบเขตจังหวัด",        "geom_type": "Polygon"},
-    "amphoe":    {"slug": "amphoe",    "name_en": "District Boundaries",     "name_th": "ขอบเขตอำเภอ",          "geom_type": "Polygon"},
-    "tambon":    {"slug": "tambon",    "name_en": "Sub-district Boundaries", "name_th": "ขอบเขตตำบล",           "geom_type": "Polygon"},
+    "roads":            {"slug": "roads",            "name_en": "Road Network",            "name_th": "เส้นทางจราจร",        "geom_type": "Linestring"},
+    "waterways":        {"slug": "waterways",        "name_en": "Waterways",                "name_th": "แหล่งน้ำ",              "geom_type": "Linestring"},
+    "railways":         {"slug": "railways",         "name_en": "Railways",                 "name_th": "ทางรถไฟ",              "geom_type": "Linestring"},
+    "buildings":        {"slug": "buildings",        "name_en": "Buildings (OSM)",          "name_th": "อาคาร (OSM)",          "geom_type": "Polygon"},
+    "ms_buildings":     {"slug": "ms_buildings",     "name_en": "Buildings (Microsoft)",   "name_th": "อาคาร (Microsoft)",   "geom_type": "Polygon"},
+    "google_buildings": {"slug": "google_buildings", "name_en": "Buildings (Google)",      "name_th": "อาคาร (Google)",      "geom_type": "Polygon"},
+    "landuse":          {"slug": "landuse",          "name_en": "Land Use",                 "name_th": "การใช้ประโยชน์ที่ดิน",   "geom_type": "Polygon"},
+    "natural":          {"slug": "natural",          "name_en": "Natural Features",         "name_th": "ลักษณะทางธรรมชาติ",    "geom_type": "Polygon"},
+    "parks":            {"slug": "parks",            "name_en": "National Parks",            "name_th": "อุทยานแห่งชาติ",          "geom_type": "Polygon"},
+    "temples":          {"slug": "temples",          "name_en": "Temples & Shrines",         "name_th": "วัด/ศาสนสถาน",           "geom_type": "Point"},
+    "pois":             {"slug": "pois",             "name_en": "Points of Interest",        "name_th": "สถานที่สำคัญ",            "geom_type": "Point"},
+    "province":         {"slug": "province",         "name_en": "Province Boundaries",     "name_th": "ขอบเขตจังหวัด",        "geom_type": "Polygon"},
+    "amphoe":           {"slug": "amphoe",           "name_en": "District Boundaries",     "name_th": "ขอบเขตอำเภอ",          "geom_type": "Polygon"},
+    "tambon":           {"slug": "tambon",           "name_en": "Sub-district Boundaries", "name_th": "ขอบเขตตำบล",           "geom_type": "Polygon"},
+    "worldpop":         {"slug": "worldpop",         "name_en": "Population (WorldPop 2020)", "name_th": "ประชากร (WorldPop 2020)", "geom_type": "Raster", "data_type": "raster"},
 }
+
+# Layers that are stored as raster GeoTIFF instead of vector GeoJSON
+RASTER_LAYERS = {"worldpop"}
 
 DRIVER_MAP = {
     "shp": "ESRI Shapefile",
@@ -192,6 +201,11 @@ def create_download_zip(
                 zf.writestr(filename, data)
                 total_size_mb += len(data) / (1024 * 1024)
 
+        # ── Embed attribution + license + readme (legal requirement) ──
+        zf.writestr("ATTRIBUTION.txt", build_attribution_text([layer_slug]))
+        zf.writestr("LICENSE.txt",     build_license_text([layer_slug]))
+        zf.writestr("README.txt",      build_readme_text([layer_slug], list(formats), len(gdf)))
+
     zip_buf.seek(0)
     return zip_buf.read(), total_size_mb
 
@@ -206,13 +220,19 @@ class ClipService:
         layers = []
         for slug in LAYER_METADATA:
             meta = load_metadata(slug)
+            # Raster layers live in .tif, vector layers in .geojson
+            if slug in RASTER_LAYERS:
+                file_present = (DATA_DIR / f"{slug}.tif").exists()
+            else:
+                file_present = (DATA_DIR / f"{slug}.geojson").exists()
             layers.append({
                 "slug": slug,
                 "name_en": meta.get("name_en", slug),
                 "name_th": meta.get("name_th", ""),
                 "geom_type": meta.get("geom_type", "Unknown"),
                 "feature_count": meta.get("feature_count", 0),
-                "status": "active" if (DATA_DIR / f"{slug}.geojson").exists() else "no_data",
+                "data_type": meta.get("data_type", "vector"),
+                "status": "active" if file_present else "no_data",
             })
         return layers
 
@@ -225,15 +245,42 @@ class ClipService:
         results = {}
         for slug in layer_slugs:
             try:
-                gdf = load_layer_from_file(slug)
-                clipped = clip_layer(gdf, aoi_geom)
-                results[slug] = {
-                    "feature_count": len(clipped),
-                    "estimated_mb_shp": round(estimate_size_mb(clipped, "shp"), 3),
-                    "estimated_mb_geojson": round(estimate_size_mb(clipped, "geojson"), 3),
-                    "centroid": mapping(clipped.geometry.centroid.unary_union).get("coordinates")
-                                if not clipped.empty else None,
-                }
+                if slug in RASTER_LAYERS:
+                    # Raster preview — return summary stats instead of feature count
+                    from raster_clipper import clip_raster_to_aoi
+                    raster_path = DATA_DIR / f"{slug}.tif"
+                    if not raster_path.exists():
+                        results[slug] = {"error": f"No data file for raster layer: {slug}"}
+                        continue
+                    r = clip_raster_to_aoi(raster_path, aoi_geojson)
+                    if r is None:
+                        results[slug] = {"feature_count": 0, "error": "AOI does not intersect raster"}
+                        continue
+                    s = r["stats"]
+                    # For population grids, "feature_count" is repurposed as estimated total population
+                    results[slug] = {
+                        "feature_count": int(round(s["sum"])),
+                        "raster_stats": {
+                            "sum":  round(s["sum"], 1),
+                            "mean": round(s["mean"], 4),
+                            "min":  round(s["min"], 4),
+                            "max":  round(s["max"], 4),
+                            "pixel_count": s["pixel_count"],
+                            "area_km2": round(s["area_km2"], 2),
+                        },
+                        "estimated_mb_shp": round(len(r["tif_bytes"]) / (1024 * 1024), 3),
+                        "estimated_mb_geojson": round(len(r["tif_bytes"]) / (1024 * 1024), 3),
+                    }
+                else:
+                    gdf = load_layer_from_file(slug)
+                    clipped = clip_layer(gdf, aoi_geom)
+                    results[slug] = {
+                        "feature_count": len(clipped),
+                        "estimated_mb_shp": round(estimate_size_mb(clipped, "shp"), 3),
+                        "estimated_mb_geojson": round(estimate_size_mb(clipped, "geojson"), 3),
+                        "centroid": mapping(clipped.geometry.centroid.unary_union).get("coordinates")
+                                    if not clipped.empty else None,
+                    }
             except FileNotFoundError as e:
                 results[slug] = {"error": str(e)}
             except Exception as e:
@@ -258,27 +305,40 @@ class ClipService:
             raise ValueError("AOI too large. Please draw a smaller area.")
 
         total_features = 0
-        zip_parts = []
+        zip_parts = []     # vector: (gdf, slug)
+        raster_parts = []  # raster: (clip_result, slug)
 
         for slug in layer_slugs:
             try:
-                gdf = load_layer_from_file(slug)
-                clipped = clip_layer(gdf, aoi_geom)
-                if clipped.empty:
-                    continue
-                total_features += len(clipped)
-                zip_parts.append((clipped, slug))
+                if slug in RASTER_LAYERS:
+                    from raster_clipper import clip_raster_to_aoi
+                    raster_path = DATA_DIR / f"{slug}.tif"
+                    if not raster_path.exists():
+                        continue
+                    r = clip_raster_to_aoi(raster_path, aoi_geojson)
+                    if r is None:
+                        continue
+                    raster_parts.append((r, slug))
+                    total_features += int(round(r["stats"]["sum"]))
+                else:
+                    gdf = load_layer_from_file(slug)
+                    clipped = clip_layer(gdf, aoi_geom)
+                    if clipped.empty:
+                        continue
+                    total_features += len(clipped)
+                    zip_parts.append((clipped, slug))
             except FileNotFoundError:
                 continue
 
-        if not zip_parts:
-            raise ValueError("No data found for selected layers. Run osm_fetcher.py first.")
+        if not zip_parts and not raster_parts:
+            raise ValueError("No data found for selected layers. Run the appropriate fetcher first.")
 
         download_id = uuid.uuid4().hex
         zip_path = Path(tempfile.gettempdir()) / f"{download_id}.zip"
         total_size_mb = 0.0
 
         with zipfile.ZipFile(str(zip_path), "w", zipfile.ZIP_DEFLATED) as zf:
+            # ── Vector layers ──
             for gdf, slug in zip_parts:
                 layer_name = slug.replace("-", "_")
                 for fmt in formats:
@@ -292,6 +352,32 @@ class ClipService:
                         data = gdf_to_bytes(gdf, fmt, layer_name)
                         zf.writestr(filename, data)
                         total_size_mb += len(data) / (1024 * 1024)
+
+            # ── Raster layers (always emitted as GeoTIFF + summary CSV) ──
+            for r, slug in raster_parts:
+                layer_name = slug.replace("-", "_")
+                # Cropped GeoTIFF
+                zf.writestr(f"{layer_name}.tif", r["tif_bytes"])
+                total_size_mb += len(r["tif_bytes"]) / (1024 * 1024)
+                # Stats CSV
+                s = r["stats"]
+                csv_text = (
+                    "metric,value\n"
+                    f"sum,{s['sum']}\n"
+                    f"mean,{s['mean']}\n"
+                    f"min,{s['min']}\n"
+                    f"max,{s['max']}\n"
+                    f"pixel_count,{s['pixel_count']}\n"
+                    f"area_km2,{s['area_km2']}\n"
+                )
+                zf.writestr(f"{layer_name}_stats.csv", csv_text)
+                total_size_mb += len(csv_text) / (1024 * 1024)
+
+            # ── Embed attribution + license + readme (legal requirement) ──
+            included_slugs = [s for _, s in zip_parts] + [s for _, s in raster_parts]
+            zf.writestr("ATTRIBUTION.txt", build_attribution_text(included_slugs))
+            zf.writestr("LICENSE.txt",     build_license_text(included_slugs))
+            zf.writestr("README.txt",      build_readme_text(included_slugs, list(formats), total_features))
 
         # ── Upload to S3 ──
         object_key = f"downloads/{download_id}.zip"

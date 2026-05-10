@@ -65,25 +65,30 @@ const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || "";
 const API_BASE = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000").replace(/\/$/, "");
 
 const LAYERS: LayerInfo[] = [
-  { slug: "province",  name_en: "Provinces",      name_th: "จังหวัด",          geom_type: "Polygon",    feature_count: 0 },
-  { slug: "amphoe",    name_en: "Districts",      name_th: "อำเภอ",            geom_type: "Polygon",    feature_count: 0 },
-  { slug: "tambon",    name_en: "Sub-districts",  name_th: "ตำบล",             geom_type: "Polygon",    feature_count: 0 },
-  { slug: "roads",     name_en: "Roads",          name_th: "ถนน",              geom_type: "Linestring", feature_count: 0 },
-  { slug: "waterways", name_en: "Waterways",      name_th: "แหล่งน้ำ",         geom_type: "Linestring", feature_count: 0 },
-  { slug: "railways",  name_en: "Railways",       name_th: "ทางรถไฟ",          geom_type: "Linestring", feature_count: 0 },
-  { slug: "buildings", name_en: "Buildings",      name_th: "อาคาร",            geom_type: "Polygon",    feature_count: 0 },
-  { slug: "landuse",   name_en: "Land Use",       name_th: "การใช้ที่ดิน",     geom_type: "Polygon",    feature_count: 0 },
-  { slug: "natural",   name_en: "Natural",        name_th: "ธรรมชาติ",         geom_type: "Polygon",    feature_count: 0 },
-  { slug: "parks",     name_en: "National Parks", name_th: "อุทยาน",           geom_type: "Polygon",    feature_count: 0 },
-  { slug: "temples",   name_en: "Temples",        name_th: "วัด",              geom_type: "Point",      feature_count: 0 },
-  { slug: "pois",      name_en: "POIs",           name_th: "สถานที่สำคัญ",     geom_type: "Point",      feature_count: 0 },
+  { slug: "province",         name_en: "Provinces",            name_th: "จังหวัด",          geom_type: "Polygon",    feature_count: 0 },
+  { slug: "amphoe",           name_en: "Districts",            name_th: "อำเภอ",            geom_type: "Polygon",    feature_count: 0 },
+  { slug: "tambon",           name_en: "Sub-districts",        name_th: "ตำบล",             geom_type: "Polygon",    feature_count: 0 },
+  { slug: "roads",            name_en: "Roads",                name_th: "ถนน",              geom_type: "Linestring", feature_count: 0 },
+  { slug: "waterways",        name_en: "Waterways",            name_th: "แหล่งน้ำ",         geom_type: "Linestring", feature_count: 0 },
+  { slug: "railways",         name_en: "Railways",             name_th: "ทางรถไฟ",          geom_type: "Linestring", feature_count: 0 },
+  { slug: "buildings",        name_en: "Buildings (OSM)",      name_th: "อาคาร (OSM)",      geom_type: "Polygon",    feature_count: 0 },
+  { slug: "ms_buildings",     name_en: "Buildings (Microsoft)", name_th: "อาคาร (Microsoft)", geom_type: "Polygon",  feature_count: 0 },
+  { slug: "google_buildings", name_en: "Buildings (Google)",   name_th: "อาคาร (Google)",   geom_type: "Polygon",    feature_count: 0 },
+  { slug: "landuse",          name_en: "Land Use",             name_th: "การใช้ที่ดิน",     geom_type: "Polygon",    feature_count: 0 },
+  { slug: "natural",          name_en: "Natural",              name_th: "ธรรมชาติ",         geom_type: "Polygon",    feature_count: 0 },
+  { slug: "parks",            name_en: "National Parks",       name_th: "อุทยาน",           geom_type: "Polygon",    feature_count: 0 },
+  { slug: "temples",          name_en: "Temples",              name_th: "วัด",              geom_type: "Point",      feature_count: 0 },
+  { slug: "pois",             name_en: "POIs",                 name_th: "สถานที่สำคัญ",     geom_type: "Point",      feature_count: 0 },
+  { slug: "worldpop",         name_en: "Population (2020)",    name_th: "ประชากร (2020)",   geom_type: "Raster",     feature_count: 0 },
 ];
 
 const LAYER_COLORS: Record<string, string> = {
-  province:  "#8B5CF6", amphoe:    "#3B82F6", tambon:    "#06B6D4",
-  roads:     "#EF4444", waterways: "#0EA5E9", railways:  "#7C3AED",
-  buildings: "#F97316", landuse:   "#22C55E", natural:   "#14B8A6",
-  parks:     "#16A34A", temples:   "#EAB308", pois:      "#EC4899",
+  province:         "#8B5CF6", amphoe:    "#3B82F6", tambon:    "#06B6D4",
+  roads:            "#EF4444", waterways: "#0EA5E9", railways:  "#7C3AED",
+  buildings:        "#F97316", landuse:   "#22C55E", natural:   "#14B8A6",
+  parks:            "#16A34A", temples:   "#EAB308", pois:      "#EC4899",
+  ms_buildings:     "#FB923C",                       google_buildings: "#FACC15",
+  worldpop:         "#DC2626",
 };
 
 const QUICK_LOCATIONS = [
@@ -846,6 +851,15 @@ export default function MapSelector() {
             📥 History
           </button>
 
+          {/* Attributions */}
+          <a
+            href="/attributions"
+            className="px-3 py-1.5 rounded-md hover:bg-slate-100 text-slate-700 font-medium text-xs"
+            title="Data sources & licenses"
+          >
+            © Sources
+          </a>
+
           {/* Sign in / out */}
           {userId ? (
             <button
@@ -979,31 +993,46 @@ export default function MapSelector() {
               const vis = visibleLayers.has(l.slug);
               const loading = loadingLayer === l.slug;
               const color = LAYER_COLORS[l.slug];
+              const isRaster = l.geom_type.toLowerCase() === "raster";
+              const noData = l.status === "no_data";
+              const disabled = !aoi || noData;
+              const featureLabel = isRaster
+                ? "Raster — population grid"
+                : noData
+                  ? "Coming soon"
+                  : `${l.feature_count.toLocaleString()} features`;
               return (
                 <div
                   key={l.slug}
-                  className={`flex items-center gap-2 p-2 rounded-md border ${sel ? "border-blue-300 bg-blue-50" : "border-slate-200 bg-white hover:bg-slate-50"}`}
+                  className={`flex items-center gap-2 p-2 rounded-md border ${sel ? "border-blue-300 bg-blue-50" : "border-slate-200 bg-white hover:bg-slate-50"} ${noData ? "opacity-60" : ""}`}
                 >
                   <input
                     type="checkbox"
                     checked={sel}
-                    onChange={() => aoi && toggleLayerSelected(l.slug)}
-                    disabled={!aoi}
+                    onChange={() => !disabled && toggleLayerSelected(l.slug)}
+                    disabled={disabled}
                     className="w-4 h-4 cursor-pointer"
+                    title={noData ? "Data still being prepared" : ""}
                   />
                   <LayerSymbol geomType={l.geom_type} color={color} />
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm text-slate-900 leading-tight truncate">{l.name_en}</div>
-                    <div className="text-[11px] text-slate-500 leading-tight">{l.feature_count.toLocaleString()} features</div>
+                    <div className="text-sm text-slate-900 leading-tight truncate flex items-center gap-1">
+                      {l.name_en}
+                      {noData && <span className="text-[9px] px-1 rounded bg-amber-100 text-amber-800 font-medium">SOON</span>}
+                      {isRaster && !noData && <span className="text-[9px] px-1 rounded bg-purple-100 text-purple-800 font-medium">RASTER</span>}
+                    </div>
+                    <div className="text-[11px] text-slate-500 leading-tight">{featureLabel}</div>
                   </div>
-                  <button
-                    onClick={() => toggleLayerVisible(l.slug)}
-                    disabled={loading || !mapReady}
-                    title={vis ? "Hide on map" : "Show on map"}
-                    className={`w-8 h-8 rounded text-xs flex items-center justify-center transition ${vis ? "bg-slate-800 text-white" : "bg-slate-100 hover:bg-slate-200 text-slate-600"}`}
-                  >
-                    {loading ? <Spinner /> : (vis ? "👁" : "👁︎")}
-                  </button>
+                  {!isRaster && (
+                    <button
+                      onClick={() => toggleLayerVisible(l.slug)}
+                      disabled={loading || !mapReady || noData}
+                      title={vis ? "Hide on map" : "Show on map"}
+                      className={`w-8 h-8 rounded text-xs flex items-center justify-center transition ${vis ? "bg-slate-800 text-white" : "bg-slate-100 hover:bg-slate-200 text-slate-600"} disabled:opacity-30`}
+                    >
+                      {loading ? <Spinner /> : (vis ? "👁" : "👁︎")}
+                    </button>
+                  )}
                 </div>
               );
             })}
