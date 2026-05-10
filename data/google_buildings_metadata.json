@@ -1,0 +1,18 @@
+{
+  "slug": "google_buildings",
+  "name_en": "Google Buildings",
+  "name_th": "อาคาร (Google)",
+  "geom_type": "Polygon",
+  "feature_count": 5128795,
+  "bbox": [
+    97.3,
+    5.6,
+    105.7,
+    20.5
+  ],
+  "source": "Google Open Buildings v3",
+  "license": "CC BY 4.0",
+  "license_url": "https://creativecommons.org/licenses/by/4.0/",
+  "attribution": "Building footprints © Google",
+  "last_refreshed": "2026-05-10T18:39:34.176186Z"
+}

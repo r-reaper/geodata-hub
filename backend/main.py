@@ -571,21 +571,30 @@ def _sync_data_from_r2():
     data_dir = Path(__file__).parent.parent / "data"
     data_dir.mkdir(exist_ok=True)
 
-    # Vector layers (.geojson)
+    # Vector layers — prefer FlatGeobuf (.fgb), fall back to GeoJSON.
+    # FGB is binary + indexed → much smaller transfer + lower memory usage.
     vector_layers = ["province", "amphoe", "tambon", "roads", "waterways", "railways",
                      "buildings", "landuse", "natural", "parks", "temples", "pois",
                      "ms_buildings", "google_buildings"]
     for slug in vector_layers:
-        local = data_dir / f"{slug}.geojson"
-        if local.exists():
-            log.info(f"Data OK (local): {slug}.geojson")
+        local_fgb = data_dir / f"{slug}.fgb"
+        local_gj = data_dir / f"{slug}.geojson"
+        if local_fgb.exists() or local_gj.exists():
+            log.info(f"Data OK (local): {slug}")
             continue
-        log.info(f"Downloading {slug}.geojson from R2 ...")
-        ok = download_file_from_s3(f"data/{slug}.geojson", str(local))
+        # Try .fgb first (preferred)
+        log.info(f"Trying {slug}.fgb from R2 ...")
+        ok = download_file_from_s3(f"data/{slug}.fgb", str(local_fgb))
+        if ok:
+            log.info(f"Downloaded {slug}.fgb (FlatGeobuf)")
+            continue
+        # Fall back to .geojson
+        log.info(f"  no .fgb, trying {slug}.geojson ...")
+        ok = download_file_from_s3(f"data/{slug}.geojson", str(local_gj))
         if ok:
             log.info(f"Downloaded {slug}.geojson")
         else:
-            log.warning(f"Could not download {slug}.geojson — layer will be unavailable")
+            log.warning(f"Could not download {slug} — layer will be unavailable")
 
     # Raster layers (.tif) — WorldPop and any future raster layers
     raster_layers = ["worldpop"]
