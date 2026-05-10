@@ -455,6 +455,15 @@ def layer_sample(slug: str, bbox: Optional[str] = None, limit: int = 200):
     if slug not in LAYER_METADATA:
         raise HTTPException(status_code=404, detail=f"Layer '{slug}' not found")
 
+    # Raster layers can't be sampled as features — return empty FC and a hint
+    meta_check = LAYER_METADATA.get(slug, {})
+    if meta_check.get("data_type") == "raster" or meta_check.get("geom_type") == "Raster":
+        return {
+            "type": "FeatureCollection",
+            "features": [],
+            "note": "Raster layer — preview not supported. Use Download to get the cropped GeoTIFF.",
+        }
+
     data_file = Path(__file__).parent.parent / "data" / f"{slug}.geojson"
     if not data_file.exists():
         raise HTTPException(
@@ -562,9 +571,11 @@ def _sync_data_from_r2():
     data_dir = Path(__file__).parent.parent / "data"
     data_dir.mkdir(exist_ok=True)
 
-    layers = ["province", "amphoe", "tambon", "roads", "waterways", "railways",
-              "buildings", "landuse", "natural", "parks", "temples", "pois"]
-    for slug in layers:
+    # Vector layers (.geojson)
+    vector_layers = ["province", "amphoe", "tambon", "roads", "waterways", "railways",
+                     "buildings", "landuse", "natural", "parks", "temples", "pois",
+                     "ms_buildings", "google_buildings"]
+    for slug in vector_layers:
         local = data_dir / f"{slug}.geojson"
         if local.exists():
             log.info(f"Data OK (local): {slug}.geojson")
@@ -575,6 +586,26 @@ def _sync_data_from_r2():
             log.info(f"Downloaded {slug}.geojson")
         else:
             log.warning(f"Could not download {slug}.geojson — layer will be unavailable")
+
+    # Raster layers (.tif) — WorldPop and any future raster layers
+    raster_layers = ["worldpop"]
+    for slug in raster_layers:
+        local = data_dir / f"{slug}.tif"
+        if local.exists():
+            log.info(f"Data OK (local): {slug}.tif")
+            continue
+        log.info(f"Downloading {slug}.tif from R2 ...")
+        ok = download_file_from_s3(f"data/{slug}.tif", str(local))
+        if ok:
+            log.info(f"Downloaded {slug}.tif")
+        else:
+            log.warning(f"Could not download {slug}.tif — layer will be unavailable")
+
+    # Metadata files (small) — try to fetch for all known layers
+    for slug in vector_layers + raster_layers:
+        local_meta = data_dir / f"{slug}_metadata.json"
+        if not local_meta.exists():
+            download_file_from_s3(f"data/{slug}_metadata.json", str(local_meta))
 
 
 @app.on_event("startup")

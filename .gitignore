@@ -17,7 +17,16 @@ frontend/.next/
 
 # Data (large GeoJSON files — store in R2, not git)
 data/*.geojson
+data/*.tif
 data/*.zip
+data/.*_state.json
+
+# Worktrees (Claude internal)
+.claude/worktrees/
+
+# TypeScript build artifacts
+frontend/tsconfig.tsbuildinfo
+frontend/.next/
 
 # Build artifacts
 *.zip
