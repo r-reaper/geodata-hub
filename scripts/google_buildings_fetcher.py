@@ -40,18 +40,17 @@ log = logging.getLogger(__name__)
 # Configuration
 # ─────────────────────────────────────────────
 
-# S2 level-4 cell tokens covering Thailand (manually selected from
-# https://s2.sidewalklabs.com/regioncoverer/?center=15.0%2C101.0&zoom=5).
-# Each cell ~600 km wide.
-# Computed by intersecting Thailand bbox with S2 grid; tokens validated against
-# Google's available files at gs://open-buildings-data/v3/.
+# S2 level-4 cell tokens covering Thailand bbox, computed via s2sphere:
+#   coverer = s2.RegionCoverer(); min/max_level=4; covering(LatLngRect(...))
+# Updated 2026-05-11: previous list (31b, 319, 31d, 317, 315, 313) was mostly
+# wrong — only 31b and 313 actually exist on Google's data tree.
 THAILAND_S2_LEVEL4_CELLS = [
-    "31b",   # NW Thailand (Chiang Rai / Chiang Mai)
-    "319",   # SE Asia core (covers much of Thailand)
-    "31d",   # NE Thailand / Laos border
-    "317",   # Central Thailand
-    "315",   # Gulf of Thailand
+    "305",   # West / Andaman side
+    "30d",   # Northern Thailand (with 31b)
+    "30f",   # NE Isaan / Mekong border
+    "311",   # Central + East Thailand (Bangkok!)
     "313",   # Southern peninsula
+    "31b",   # NW corner (Chiang Mai)
 ]
 
 BASE_URL = "https://storage.googleapis.com/open-buildings-data/v3/polygons_s2_level_4_gzip"
