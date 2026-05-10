@@ -82,14 +82,26 @@ DRIVER_MAP = {
 # Core clipping logic
 # ─────────────────────────────────────────────
 
-def load_layer_from_file(slug: str) -> gpd.GeoDataFrame:
-    """Load a layer from local GeoJSON file."""
-    path = DATA_DIR / f"{slug}.geojson"
+def load_layer_from_file(slug: str, bbox: tuple | None = None) -> gpd.GeoDataFrame:
+    """Load a layer from local file. Prefers FlatGeobuf (.fgb) over GeoJSON.
+
+    FlatGeobuf is binary and indexed → much faster for large layers and supports
+    bbox push-down so we don't load the whole file into memory.
+
+    Args:
+        slug: layer slug (e.g. "ms_buildings")
+        bbox: optional (west, south, east, north) — passed to fiona for spatial
+              push-down filter when reading FlatGeobuf or GeoJSON.
+    """
+    fgb = DATA_DIR / f"{slug}.fgb"
+    geojson = DATA_DIR / f"{slug}.geojson"
+    path = fgb if fgb.exists() else geojson
     if not path.exists():
-        raise FileNotFoundError(f"No data file found for layer: {slug} (expected {path})")
-    gdf = gpd.read_file(path)
-    if gdf.empty:
-        return gdf
+        raise FileNotFoundError(f"No data file found for layer: {slug} (tried {fgb}, {geojson})")
+    read_kwargs: dict = {}
+    if bbox:
+        read_kwargs["bbox"] = tuple(bbox)
+    gdf = gpd.read_file(path, **read_kwargs)
     return gdf
 
 
@@ -220,11 +232,11 @@ class ClipService:
         layers = []
         for slug in LAYER_METADATA:
             meta = load_metadata(slug)
-            # Raster layers live in .tif, vector layers in .geojson
+            # Raster layers live in .tif; vector layers in .fgb (preferred) or .geojson
             if slug in RASTER_LAYERS:
                 file_present = (DATA_DIR / f"{slug}.tif").exists()
             else:
-                file_present = (DATA_DIR / f"{slug}.geojson").exists()
+                file_present = (DATA_DIR / f"{slug}.fgb").exists() or (DATA_DIR / f"{slug}.geojson").exists()
             layers.append({
                 "slug": slug,
                 "name_en": meta.get("name_en", slug),
@@ -272,7 +284,8 @@ class ClipService:
                         "estimated_mb_geojson": round(len(r["tif_bytes"]) / (1024 * 1024), 3),
                     }
                 else:
-                    gdf = load_layer_from_file(slug)
+                    # Push down AOI bbox so we don't load the whole file
+                    gdf = load_layer_from_file(slug, bbox=aoi_geom.bounds)
                     clipped = clip_layer(gdf, aoi_geom)
                     results[slug] = {
                         "feature_count": len(clipped),
@@ -321,7 +334,7 @@ class ClipService:
                     raster_parts.append((r, slug))
                     total_features += int(round(r["stats"]["sum"]))
                 else:
-                    gdf = load_layer_from_file(slug)
+                    gdf = load_layer_from_file(slug, bbox=aoi_geom.bounds)
                     clipped = clip_layer(gdf, aoi_geom)
                     if clipped.empty:
                         continue

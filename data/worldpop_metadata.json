@@ -1,0 +1,20 @@
+{
+  "slug": "worldpop",
+  "name_en": "Population (WorldPop 2020)",
+  "name_th": "ประชากร (WorldPop 2020)",
+  "geom_type": "Raster",
+  "data_type": "raster",
+  "resolution_m": 100,
+  "year": 2020,
+  "feature_count": 0,
+  "bbox": null,
+  "raster_size": null,
+  "size_mb": 250.57,
+  "source": "WorldPop (University of Southampton)",
+  "source_url": "https://www.worldpop.org/",
+  "license": "CC BY 4.0",
+  "license_url": "https://creativecommons.org/licenses/by/4.0/",
+  "attribution": "Population data © WorldPop, University of Southampton",
+  "last_refreshed": "2026-05-10T17:44:15.059160Z",
+  "filename": "worldpop.tif"
+}
