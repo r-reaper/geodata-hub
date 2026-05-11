@@ -802,9 +802,8 @@ def _sync_data_from_r2():
         elif needs_download_gj is False:
             log.info(f"Data OK (local matches R2): {slug}.geojson")
 
-    # Raster layers (.tif). SRTM is registered in LAYER_METADATA but not synced
-    # until a fetcher with API key is run — see scripts/srtm_fetcher.py.
-    raster_layers = ["worldpop"]
+    # Raster layers (.tif): WorldPop population + SRTM 30m elevation.
+    raster_layers = ["worldpop", "srtm"]
     for slug in raster_layers:
         local = data_dir / f"{slug}.tif"
         needs = _r2_file_differs_from_local(f"data/{slug}.tif", local)

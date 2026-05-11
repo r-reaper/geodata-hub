@@ -35,7 +35,9 @@ also allowed within fair-use rate limits.
 
 import json
 import logging
+import os
 import sys
+import tempfile
 from datetime import datetime
 from pathlib import Path
 
@@ -55,53 +57,100 @@ META_PATH = DATA_DIR / "srtm_metadata.json"
 HEADERS = {"User-Agent": "ThaiGeoDataHub/1.0 (https://geodata-hub.vercel.app)"}
 
 
-def fetch_via_opentopo() -> bool:
-    """
-    OpenTopography Global Datasets API.
-      demtype=SRTMGL1  → SRTM 1 arc-second (30m)
-      output=GTiff     → GeoTIFF
-    No API key required for public DEMs at small bbox.
-    """
+# OpenTopography limits SRTMGL1 to 450,000 km² per request. Thailand is
+# ~1.5M km², so we split into 4 quadrants (each ~390,000 km²) and mosaic.
+# 4° wide × 7.45° tall × 111² km/° ≈ 388,000 km² → under the limit.
+TILES = [
+    # (name,  west,   south, east,  north)
+    ("SW",    97.3,    5.6,  101.5, 13.05),
+    ("SE",   101.5,    5.6,  105.7, 13.05),
+    ("NW",    97.3,   13.05, 101.5, 20.5),
+    ("NE",   101.5,   13.05, 105.7, 20.5),
+]
+
+
+def _fetch_one_tile(name: str, w: float, s: float, e: float, n: float, api_key: str, out_path: Path) -> bool:
+    """Download a single SRTM tile from OpenTopography to out_path."""
     url = "https://portal.opentopography.org/API/globaldem"
     params = {
         "demtype": "SRTMGL1",
-        "south": SOUTH,
-        "north": NORTH,
-        "west":  WEST,
-        "east":  EAST,
+        "south": s, "north": n, "west": w, "east": e,
         "outputFormat": "GTiff",
-        # API key is optional for public DEMs but increases rate limits.
-        # Users can register a free key at portal.opentopography.org and set
-        # OPENTOPO_API_KEY env var to use it.
+        "API_Key": api_key,
     }
-    import os
-    if (k := os.getenv("OPENTOPO_API_KEY")):
-        params["API_Key"] = k
 
-    log.info(f"Trying OpenTopography for SRTM 30m over Thailand bbox...")
-    log.info(f"  bbox: ({WEST}, {SOUTH}, {EAST}, {NORTH})")
-
+    log.info(f"  Fetching tile {name}: ({w}, {s}, {e}, {n})")
     resp = requests.get(url, params=params, headers=HEADERS, timeout=900, stream=True)
     if resp.status_code != 200:
-        log.warning(f"  OpenTopography returned HTTP {resp.status_code}: {resp.text[:200]}")
+        log.warning(f"  Tile {name} returned HTTP {resp.status_code}: {resp.text[:200]}")
         return False
 
     total_bytes = int(resp.headers.get("Content-Length", 0))
     written = 0
     last_pct = -1
-    with open(OUT_PATH, "wb") as f:
+    with open(out_path, "wb") as f:
         for chunk in resp.iter_content(chunk_size=1024 * 1024):
             if chunk:
                 f.write(chunk)
                 written += len(chunk)
                 if total_bytes:
                     pct = written * 100 // total_bytes
-                    if pct >= last_pct + 5:
-                        log.info(f"  {pct}%  ({written // (1024*1024)} MB / {total_bytes // (1024*1024)} MB)")
+                    if pct >= last_pct + 25:  # every 25% per tile to keep log readable
+                        log.info(f"    {pct}%  ({written // (1024*1024)} MB / {total_bytes // (1024*1024)} MB)")
                         last_pct = pct
 
+    size_mb = out_path.stat().st_size / (1024 * 1024)
+    log.info(f"  Saved tile {name} ({size_mb:.1f} MB)")
+    return True
+
+
+def fetch_via_opentopo() -> bool:
+    """Fetch SRTM as 4 tiles and mosaic them into a single GeoTIFF."""
+    api_key = os.getenv("OPENTOPO_API_KEY", "").strip()
+    if not api_key:
+        log.error("OPENTOPO_API_KEY env var is required. Register free at portal.opentopography.org.")
+        return False
+
+    log.info("Fetching SRTM 30m over Thailand in 4 tiles (OpenTopography 450k km² limit)…")
+
+    # Write tiles to a temp dir then mosaic
+    with tempfile.TemporaryDirectory(prefix="srtm_tiles_") as tmpdir:
+        tile_paths: list[Path] = []
+        for name, w, s, e, n in TILES:
+            tp = Path(tmpdir) / f"srtm_{name}.tif"
+            if not _fetch_one_tile(name, w, s, e, n, api_key, tp):
+                log.error(f"Failed tile {name} — aborting")
+                return False
+            tile_paths.append(tp)
+
+        # Mosaic with rasterio
+        log.info("Mosaicking tiles into single GeoTIFF…")
+        try:
+            import rasterio
+            from rasterio.merge import merge as rio_merge
+        except ImportError:
+            log.error("rasterio not installed. Run: pip install rasterio")
+            return False
+
+        srcs = [rasterio.open(p) for p in tile_paths]
+        try:
+            mosaic, out_transform = rio_merge(srcs)
+            out_meta = srcs[0].meta.copy()
+            out_meta.update({
+                "driver":    "GTiff",
+                "height":    mosaic.shape[1],
+                "width":     mosaic.shape[2],
+                "transform": out_transform,
+                "compress":  "deflate",  # ~50% smaller for elevation rasters
+            })
+            with rasterio.open(OUT_PATH, "w", **out_meta) as dst:
+                dst.write(mosaic)
+        finally:
+            for src in srcs:
+                src.close()
+
     size_mb = OUT_PATH.stat().st_size / (1024 * 1024)
-    log.info(f"Saved {OUT_PATH} ({size_mb:.1f} MB)")
+    log.info(f"Mosaicked output: {OUT_PATH} ({size_mb:.1f} MB)")
     return True
 
 
