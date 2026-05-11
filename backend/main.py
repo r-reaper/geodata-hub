@@ -86,6 +86,13 @@ class ClipDataRequest(BaseModel):
     layers: list[str]
     formats: list[str] = ["shp", "geojson", "kml"]
     user_id: Optional[str] = None
+    # Target output CRS for the downloaded data. Default = WGS 84 (lon/lat).
+    # Allowed values:
+    #   EPSG:4326  → WGS 84 (lon/lat, decimal degrees)
+    #   EPSG:3857  → Web Mercator (meters, for web maps)
+    #   EPSG:32647 → UTM Zone 47N (meters, western Thailand: Phuket / Krabi)
+    #   EPSG:32648 → UTM Zone 48N (meters, central/eastern Thailand: Bangkok / Isaan)
+    target_crs: Optional[str] = "EPSG:4326"
 
 
 # ─────────────────────────────────────────────
@@ -148,6 +155,7 @@ def get_layers():
 
 @app.get("/layers/{slug}")
 def get_layer_detail(slug: str):
+    """Quick layer info (used by frontend layer list)."""
     if slug not in LAYER_METADATA:
         raise HTTPException(status_code=404, detail=f"Layer '{slug}' not found")
     try:
@@ -160,6 +168,160 @@ def get_layer_detail(slug: str):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/layers/{slug}/details")
+def get_layer_details_full(slug: str):
+    """
+    Comprehensive layer metadata for the "info" modal in the UI:
+      - source + license + attribution + refresh date
+      - geometry type, feature count, bbox, native CRS
+      - attribute schema (column names + types)
+      - sample feature properties (one example row)
+    """
+    if slug not in LAYER_METADATA:
+        raise HTTPException(status_code=404, detail=f"Layer '{slug}' not found")
+
+    base = LAYER_METADATA[slug]
+    meta_file = Path(__file__).parent.parent / "data" / f"{slug}_metadata.json"
+    extra = {}
+    if meta_file.exists():
+        try:
+            extra = json.loads(meta_file.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+
+    # Build attribute schema + sample by sniffing the actual data file
+    schema: list = []
+    sample: dict = {}
+    geom_type_actual = base.get("geom_type", "Unknown")
+    crs = "EPSG:4326"
+
+    is_raster = base.get("data_type") == "raster" or base.get("geom_type") == "Raster"
+    data_dir = Path(__file__).parent.parent / "data"
+
+    if not is_raster:
+        # Vector: open with geopandas and peek at first row
+        path = data_dir / f"{slug}.fgb"
+        if not path.exists():
+            path = data_dir / f"{slug}.geojson"
+        if path.exists():
+            try:
+                import geopandas as gpd
+                gdf = gpd.read_file(path, rows=1)
+                geom_col = gdf.geometry.name
+                geom_type_actual = str(gdf.geometry.geom_type.iloc[0]) if len(gdf) else geom_type_actual
+                if gdf.crs:
+                    crs = str(gdf.crs)
+                for col in gdf.columns:
+                    if col == geom_col:
+                        continue
+                    dtype = str(gdf[col].dtype)
+                    schema.append({"name": col, "type": _friendly_type(dtype)})
+                if len(gdf):
+                    row = gdf.iloc[0].drop(geom_col).to_dict()
+                    # convert numpy types to JSON-safe
+                    sample = {k: _to_json_safe(v) for k, v in row.items()}
+            except Exception as e:
+                log.warning(f"layer-details schema sniff failed for {slug}: {e}")
+    else:
+        # Raster: report grid resolution, value type via rasterio
+        path = data_dir / f"{slug}.tif"
+        if path.exists():
+            try:
+                import rasterio
+                with rasterio.open(path) as src:
+                    schema = [
+                        {"name": "value", "type": str(src.dtypes[0])},
+                    ]
+                    sample = {
+                        "raster_band_1": "population count per pixel",
+                    }
+                    geom_type_actual = "Raster (GeoTIFF)"
+                    crs = str(src.crs)
+            except Exception:
+                pass
+
+    return {
+        "slug": slug,
+        "name_en": extra.get("name_en", base.get("name_en", slug)),
+        "name_th": extra.get("name_th", base.get("name_th", "")),
+        "geom_type": geom_type_actual,
+        "data_type": extra.get("data_type", "vector"),
+        "feature_count": extra.get("feature_count", 0),
+        "bbox": extra.get("bbox"),
+        "crs_native": crs,
+        "crs_available": ["EPSG:4326", "EPSG:3857", "EPSG:32647", "EPSG:32648"],
+        "source":      extra.get("source",      LAYER_SOURCE_DEFAULTS.get(slug, {}).get("source", "OpenStreetMap")),
+        "source_url":  extra.get("source_url",  LAYER_SOURCE_DEFAULTS.get(slug, {}).get("url", "https://www.openstreetmap.org")),
+        "license":     extra.get("license",     LAYER_SOURCE_DEFAULTS.get(slug, {}).get("license", "ODbL v1.0")),
+        "license_url": extra.get("license_url", LAYER_SOURCE_DEFAULTS.get(slug, {}).get("license_url", "https://opendatacommons.org/licenses/odbl/1-0/")),
+        "attribution": extra.get("attribution", LAYER_SOURCE_DEFAULTS.get(slug, {}).get("attribution", "© OpenStreetMap contributors")),
+        "last_refreshed": extra.get("last_refreshed"),
+        "description": LAYER_DESCRIPTIONS.get(slug, ""),
+        "schema": schema,
+        "sample": sample,
+    }
+
+
+def _friendly_type(dtype: str) -> str:
+    if "int" in dtype: return "integer"
+    if "float" in dtype: return "number"
+    if "bool" in dtype: return "boolean"
+    if "date" in dtype or "time" in dtype: return "datetime"
+    return "string"
+
+
+def _to_json_safe(v):
+    """Convert numpy/pandas types to JSON-serializable Python primitives."""
+    if v is None:
+        return None
+    try:
+        import numpy as np
+        import pandas as pd
+        if isinstance(v, (np.integer,)): return int(v)
+        if isinstance(v, (np.floating,)):
+            f = float(v)
+            return f if (f == f) else None  # NaN → None
+        if isinstance(v, (np.bool_,)): return bool(v)
+        if pd.isna(v): return None
+    except Exception:
+        pass
+    if isinstance(v, (str, int, float, bool)):
+        return v
+    return str(v)
+
+
+# Per-layer human descriptions and fallback source info
+LAYER_DESCRIPTIONS = {
+    "province":         "Thailand's 76 provinces + Bangkok metropolitan area, official admin_level=4 boundaries.",
+    "amphoe":           "District (อำเภอ) boundaries, admin_level=6, ~1,773 districts nationwide.",
+    "tambon":           "Sub-district (ตำบล) boundaries, admin_level=8, fine-grained admin units.",
+    "roads":            "Major road network: motorway, trunk, primary, secondary, tertiary classes.",
+    "waterways":        "Rivers, canals, and streams (waterway=river|canal|stream).",
+    "railways":         "Heavy rail, light rail, subway, monorail lines.",
+    "buildings":        "Building footprints from OpenStreetMap. Covers most major Thai cities.",
+    "ms_buildings":     "Microsoft AI-detected building footprints. Comprehensive nationwide coverage (~24.6M buildings).",
+    "google_buildings": "Google AI-detected building footprints with per-feature confidence scores.",
+    "landuse":          "Land use polygons: forest, residential, commercial, industrial, farmland, etc.",
+    "natural":          "Natural features: water bodies, forests, wetlands, grasslands.",
+    "parks":            "National parks, nature reserves, protected areas.",
+    "temples":          "Buddhist temples, shrines, and places of worship.",
+    "pois":             "Points of interest: hospitals, schools, banks, hotels, museums, etc.",
+    "worldpop":         "Population estimate raster, 100m resolution, year 2020, UN-adjusted (~70M people total).",
+}
+
+LAYER_SOURCE_DEFAULTS = {
+    "ms_buildings":     {"source": "Microsoft Global Building Footprints", "url": "https://github.com/microsoft/GlobalMLBuildingFootprints",
+                         "license": "ODbL v1.0", "license_url": "https://opendatacommons.org/licenses/odbl/1-0/",
+                         "attribution": "Building footprints © Microsoft"},
+    "google_buildings": {"source": "Google Open Buildings v3", "url": "https://sites.research.google/open-buildings/",
+                         "license": "CC BY 4.0", "license_url": "https://creativecommons.org/licenses/by/4.0/",
+                         "attribution": "Building footprints © Google"},
+    "worldpop":         {"source": "WorldPop (University of Southampton)", "url": "https://www.worldpop.org/",
+                         "license": "CC BY 4.0", "license_url": "https://creativecommons.org/licenses/by/4.0/",
+                         "attribution": "Population data © WorldPop, University of Southampton"},
+}
 
 
 @app.post("/preview")
@@ -212,6 +374,15 @@ def clip_data(request: ClipDataRequest, background_tasks: BackgroundTasks):
                     detail=f"Insufficient credits. Need {credits_needed}, check /payments/credits/{user_id}",
                 )
 
+    # ── Validate target CRS ──
+    ALLOWED_CRS = {"EPSG:4326", "EPSG:3857", "EPSG:32647", "EPSG:32648"}
+    target_crs = (request.target_crs or "EPSG:4326").upper()
+    if target_crs not in ALLOWED_CRS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported target_crs '{target_crs}'. Allowed: {sorted(ALLOWED_CRS)}",
+        )
+
     # ── Execute clipping ──
     try:
         result = clip_service.clip_and_package(
@@ -220,6 +391,7 @@ def clip_data(request: ClipDataRequest, background_tasks: BackgroundTasks):
             formats=request.formats,
             user_id=user_id,
             use_credits=(credits_needed > 0),
+            target_crs=target_crs,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

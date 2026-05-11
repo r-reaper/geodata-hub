@@ -179,11 +179,25 @@ def build_license_text(layer_slugs: Iterable[str]) -> str:
     return "\n".join(lines)
 
 
-def build_readme_text(layer_slugs: Iterable[str], formats: Iterable[str], total_features: int) -> str:
+CRS_DESCRIPTIONS = {
+    "EPSG:4326":  "WGS 84 (geographic, lon/lat in decimal degrees) — global default",
+    "EPSG:3857":  "Web Mercator (projected, meters) — Google Maps / OSM web tile standard",
+    "EPSG:32647": "UTM Zone 47N (projected, meters) — western Thailand (Phuket, Krabi, Ranong)",
+    "EPSG:32648": "UTM Zone 48N (projected, meters) — central/eastern Thailand (Bangkok, Pattaya, Isaan)",
+}
+
+
+def build_readme_text(
+    layer_slugs: Iterable[str],
+    formats: Iterable[str],
+    total_features: int,
+    target_crs: str = "EPSG:4326",
+) -> str:
     """Friendly README explaining what's in the ZIP."""
     sources = _used_sources(layer_slugs)
     src_names = ", ".join(SOURCES[s]["name"] for s in sources) or "Unknown"
     fmt_list = ", ".join(formats)
+    crs_desc = CRS_DESCRIPTIONS.get(target_crs, target_crs)
 
     lines = [
         "README — Thai GeoData Hub Download",
@@ -191,6 +205,7 @@ def build_readme_text(layer_slugs: Iterable[str], formats: Iterable[str], total_
         "",
         f"Layers included:    {', '.join(layer_slugs)}",
         f"Formats:            {fmt_list}",
+        f"Output CRS:         {target_crs} ({crs_desc})",
         f"Total features:     {total_features:,}",
         f"Data sources:       {src_names}",
         "",
@@ -211,7 +226,16 @@ def build_readme_text(layer_slugs: Iterable[str], formats: Iterable[str], total_
         "  LICENSE.txt        → Full legal terms — read this before redistributing",
         "  README.txt         → This file",
         "",
-        "All geometries are in EPSG:4326 (WGS 84 lon/lat).",
+        f"Coordinate Reference System:",
+        f"  Selected: {target_crs}",
+        f"  Notes:    {crs_desc}",
+    ])
+    if target_crs != "EPSG:4326":
+        lines.append(
+            f"  IMPORTANT: KML files are always exported in EPSG:4326 (KML spec requirement).\n"
+            f"             SHP and GeoJSON files use the selected {target_crs}."
+        )
+    lines.extend([
         "",
         "Questions? Visit https://geodata-hub.vercel.app/attributions",
         "",

@@ -109,7 +109,15 @@ const STORAGE = {
   email:     "geodata_email",
   aoi:       "geodata_aoi",
   seenIntro: "geodata_seen_intro",
+  crs:       "geodata_target_crs",
 };
+
+const CRS_OPTIONS = [
+  { code: "EPSG:4326",  short: "WGS 84",           label: "WGS 84 — Lat/Lon (geographic)",            hint: "Default · global standard · web/GPS" },
+  { code: "EPSG:3857",  short: "Web Mercator",     label: "Web Mercator — meters",                    hint: "Google Maps / OSM tile standard" },
+  { code: "EPSG:32647", short: "UTM 47N",          label: "UTM Zone 47N — meters",                    hint: "Western Thailand · Phuket / Krabi" },
+  { code: "EPSG:32648", short: "UTM 48N",          label: "UTM Zone 48N — meters",                    hint: "Central/East Thailand · Bangkok / Isaan" },
+];
 
 // ─────────────────────────────────────────────
 // Helpers
@@ -218,6 +226,8 @@ export default function MapSelector() {
   const [showHistory, setShowHistory] = useState(false);
   const [showIntro, setShowIntro] = useState(false);
   const [pendingAction, setPendingAction] = useState<null | "download" | "buy">(null);
+  const [layerInfoSlug, setLayerInfoSlug] = useState<string | null>(null);
+  const [targetCrs, setTargetCrs] = useState<string>("EPSG:4326");
 
   // ─────────────────────────────────────────────
   // Toast queue
@@ -236,6 +246,8 @@ export default function MapSelector() {
     const saved = localStorage.getItem(STORAGE.email);
     if (saved && isValidEmail(saved)) setUserId(saved);
     if (!localStorage.getItem(STORAGE.seenIntro)) setShowIntro(true);
+    const savedCrs = localStorage.getItem(STORAGE.crs);
+    if (savedCrs && CRS_OPTIONS.some((o) => o.code === savedCrs)) setTargetCrs(savedCrs);
   }, []);
 
   const refreshCredits = useCallback(async (uid: string | null = userId) => {
@@ -656,6 +668,7 @@ export default function MapSelector() {
           layers: Array.from(selectedLayers),
           formats: Array.from(formats),
           user_id: uid || null,
+          target_crs: targetCrs,
         }),
       });
       const data = await r.json().catch(() => ({} as any));
@@ -1023,6 +1036,13 @@ export default function MapSelector() {
                     </div>
                     <div className="text-[11px] text-slate-500 leading-tight">{featureLabel}</div>
                   </div>
+                  <button
+                    onClick={() => setLayerInfoSlug(l.slug)}
+                    title="View layer details"
+                    className="w-7 h-7 rounded text-xs flex items-center justify-center text-slate-500 hover:bg-slate-200 hover:text-slate-900"
+                  >
+                    ⓘ
+                  </button>
                   {!isRaster && (
                     <button
                       onClick={() => toggleLayerVisible(l.slug)}
@@ -1059,6 +1079,32 @@ export default function MapSelector() {
                   </button>
                 ))}
               </div>
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <p className="text-xs font-medium text-slate-700">Coordinate Reference System</p>
+                <span className="text-[10px] text-slate-500" title="KML always uses WGS 84">
+                  {targetCrs !== "EPSG:4326" && formats.has("kml") ? "KML stays WGS 84" : ""}
+                </span>
+              </div>
+              <select
+                value={targetCrs}
+                onChange={(e) => {
+                  setTargetCrs(e.target.value);
+                  try { localStorage.setItem(STORAGE.crs, e.target.value); } catch {}
+                }}
+                className="w-full px-2 py-1.5 text-xs border border-slate-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                {CRS_OPTIONS.map((o) => (
+                  <option key={o.code} value={o.code}>
+                    {o.short} ({o.code}) — {o.hint}
+                  </option>
+                ))}
+              </select>
+              <p className="text-[10px] text-slate-500 mt-1 leading-tight">
+                Default WGS 84 (lat/lon). Pick UTM for accurate distance/area in meters.
+              </p>
             </div>
 
             <button
@@ -1222,6 +1268,14 @@ export default function MapSelector() {
             setShowIntro(false);
             try { localStorage.setItem(STORAGE.seenIntro, "1"); } catch {}
           }}
+        />
+      )}
+
+      {layerInfoSlug && (
+        <LayerDetailsModal
+          slug={layerInfoSlug}
+          apiBase={API_BASE}
+          onClose={() => setLayerInfoSlug(null)}
         />
       )}
 
@@ -1473,6 +1527,170 @@ function IntroModal({ onClose }: { onClose: () => void }) {
           Got it — let's go
         </button>
       </div>
+    </div>
+  );
+}
+
+// ── Layer details modal (info icon → comprehensive metadata)
+interface LayerDetails {
+  slug: string;
+  name_en: string;
+  name_th: string;
+  geom_type: string;
+  data_type: string;
+  feature_count: number;
+  bbox: number[] | null;
+  crs_native: string;
+  crs_available: string[];
+  source: string;
+  source_url: string;
+  license: string;
+  license_url: string;
+  attribution: string;
+  last_refreshed: string | null;
+  description: string;
+  schema: Array<{ name: string; type: string }>;
+  sample: Record<string, any>;
+}
+
+function LayerDetailsModal({ slug, apiBase, onClose }: { slug: string; apiBase: string; onClose: () => void }) {
+  const [details, setDetails] = useState<LayerDetails | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await fetch(`${apiBase}/layers/${slug}/details`, { signal: AbortSignal.timeout(30000) });
+        if (!r.ok) throw new Error((await r.json()).detail || `HTTP ${r.status}`);
+        const d = await r.json();
+        if (!cancelled) setDetails(d);
+      } catch (e: any) {
+        if (!cancelled) setErr(e.message || String(e));
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [slug, apiBase]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[85vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="flex justify-between items-center p-5 border-b border-slate-200">
+          <div>
+            <h2 className="text-lg font-bold text-slate-900">{details?.name_en || slug}</h2>
+            <p className="text-xs text-slate-500">{details?.name_th}</p>
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-700 text-2xl leading-none">×</button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-5 text-sm">
+          {loading && <div className="text-center text-slate-500 py-8">Loading layer details…</div>}
+          {err && <div className="text-red-700 bg-red-50 border border-red-200 rounded p-3 text-xs">Failed to load: {err}</div>}
+          {details && (
+            <div className="space-y-4">
+              {details.description && (
+                <p className="text-slate-700">{details.description}</p>
+              )}
+
+              {/* Quick facts grid */}
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <Fact label="Geometry"      value={details.geom_type} />
+                <Fact label="Feature count" value={details.feature_count.toLocaleString()} />
+                <Fact label="Native CRS"    value={details.crs_native} />
+                <Fact label="Last updated"  value={details.last_refreshed ? new Date(details.last_refreshed).toLocaleDateString() : "—"} />
+              </div>
+
+              {/* Source / license */}
+              <div className="bg-slate-50 border border-slate-200 rounded-md p-3 text-xs space-y-1.5">
+                <div className="flex justify-between gap-2">
+                  <span className="text-slate-500">Source:</span>
+                  <a href={details.source_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-right">
+                    {details.source} ↗
+                  </a>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <span className="text-slate-500">License:</span>
+                  <a href={details.license_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-right">
+                    {details.license} ↗
+                  </a>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <span className="text-slate-500">Required attribution:</span>
+                  <code className="text-slate-900 text-[11px] text-right">{details.attribution}</code>
+                </div>
+              </div>
+
+              {/* Available CRS output formats */}
+              {details.crs_available?.length > 0 && (
+                <div>
+                  <p className="text-xs font-medium text-slate-700 mb-1.5">Available output CRS</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {details.crs_available.map((c) => (
+                      <span key={c} className="text-[10px] px-2 py-1 rounded bg-blue-50 text-blue-800 border border-blue-200">{c}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Attribute schema */}
+              {details.schema?.length > 0 && (
+                <div>
+                  <p className="text-xs font-medium text-slate-700 mb-1.5">Attribute schema ({details.schema.length} fields)</p>
+                  <div className="border border-slate-200 rounded-md overflow-hidden">
+                    <table className="w-full text-xs">
+                      <thead className="bg-slate-100">
+                        <tr>
+                          <th className="text-left px-2 py-1 font-medium text-slate-700">Field</th>
+                          <th className="text-left px-2 py-1 font-medium text-slate-700">Type</th>
+                          <th className="text-left px-2 py-1 font-medium text-slate-700">Sample</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {details.schema.map((s, i) => (
+                          <tr key={s.name} className={i % 2 ? "bg-slate-50" : ""}>
+                            <td className="px-2 py-1 font-mono text-slate-900">{s.name}</td>
+                            <td className="px-2 py-1 text-slate-600">{s.type}</td>
+                            <td className="px-2 py-1 text-slate-700 truncate max-w-xs">
+                              {(() => {
+                                const v = details.sample?.[s.name];
+                                if (v === null || v === undefined) return <span className="text-slate-400">null</span>;
+                                const str = typeof v === "object" ? JSON.stringify(v) : String(v);
+                                return str.length > 50 ? str.slice(0, 50) + "…" : str;
+                              })()}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Bbox */}
+              {details.bbox && details.bbox.length === 4 && (
+                <div>
+                  <p className="text-xs font-medium text-slate-700 mb-1.5">Coverage bbox (W, S, E, N)</p>
+                  <code className="text-[11px] bg-slate-100 px-2 py-1 rounded block">
+                    [{details.bbox.map((n) => n.toFixed(3)).join(", ")}]
+                  </code>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Fact({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="bg-slate-50 border border-slate-200 rounded px-2 py-1.5">
+      <div className="text-[10px] uppercase tracking-wide text-slate-500 font-medium">{label}</div>
+      <div className="text-sm text-slate-900 font-medium truncate">{value}</div>
     </div>
   );
 }

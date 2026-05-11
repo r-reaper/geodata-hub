@@ -307,8 +307,9 @@ class ClipService:
         formats: list[str] = ("shp", "geojson", "kml"),
         user_id: Optional[str] = None,
         use_credits: bool = False,
+        target_crs: str = "EPSG:4326",
     ) -> dict:
-        """Clip layers to AOI, upload ZIP to S3, return presigned URL."""
+        """Clip layers to AOI, optionally reproject to target_crs, upload ZIP to S3."""
         try:
             aoi_geom = shape(aoi_geojson["geometry"])
         except Exception as e:
@@ -350,19 +351,37 @@ class ClipService:
         zip_path = Path(tempfile.gettempdir()) / f"{download_id}.zip"
         total_size_mb = 0.0
 
+        # ── CRS handling ──
+        # KML always requires EPSG:4326 (WGS 84) by spec.
+        # SHP/GeoJSON honour the requested target_crs.
+        do_reproject = target_crs and target_crs.upper() not in ("EPSG:4326", "EPSG:WGS84")
+        if do_reproject:
+            log.info(f"Reprojecting vector layers to {target_crs} (KML keeps EPSG:4326)")
+
+        def _gdf_in_crs(gdf, fmt):
+            """Return gdf in the right CRS for the given output format."""
+            if not do_reproject or fmt == "kml":
+                return gdf
+            try:
+                return gdf.to_crs(target_crs) if gdf.crs else gdf
+            except Exception as e:
+                log.warning(f"reproject failed (fmt={fmt}): {e} — keeping original CRS")
+                return gdf
+
         with zipfile.ZipFile(str(zip_path), "w", zipfile.ZIP_DEFLATED) as zf:
             # ── Vector layers ──
             for gdf, slug in zip_parts:
                 layer_name = slug.replace("-", "_")
                 for fmt in formats:
+                    gdf_out = _gdf_in_crs(gdf, fmt)
                     if fmt == "shp":
-                        parts = gdf_to_bytes(gdf, fmt, layer_name)
+                        parts = gdf_to_bytes(gdf_out, fmt, layer_name)
                         for sub_ext, data in parts.items():
                             zf.writestr(f"{layer_name}.{sub_ext}", data)
                             total_size_mb += len(data) / (1024 * 1024)
                     else:
                         filename = f"{layer_name}.{fmt}"
-                        data = gdf_to_bytes(gdf, fmt, layer_name)
+                        data = gdf_to_bytes(gdf_out, fmt, layer_name)
                         zf.writestr(filename, data)
                         total_size_mb += len(data) / (1024 * 1024)
 
@@ -390,7 +409,7 @@ class ClipService:
             included_slugs = [s for _, s in zip_parts] + [s for _, s in raster_parts]
             zf.writestr("ATTRIBUTION.txt", build_attribution_text(included_slugs))
             zf.writestr("LICENSE.txt",     build_license_text(included_slugs))
-            zf.writestr("README.txt",      build_readme_text(included_slugs, list(formats), total_features))
+            zf.writestr("README.txt",      build_readme_text(included_slugs, list(formats), total_features, target_crs))
 
         # ── Upload to S3 ──
         object_key = f"downloads/{download_id}.zip"
