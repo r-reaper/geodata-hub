@@ -14,7 +14,7 @@ const plexThai = IBM_Plex_Sans_Thai({
 
 export const metadata: Metadata = {
   title: 'Thai GeoData Hub',
-  description: 'Browse, preview, and download Thai spatial data by AOI — free OSM clipping, donations welcome.',
+  description: 'Browse, preview, and download Thai spatial data by area of interest — free OSM clipping with multi-format export.',
 }
 
 export default function RootLayout({

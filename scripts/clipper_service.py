@@ -66,10 +66,11 @@ LAYER_METADATA = {
     "amphoe":           {"slug": "amphoe",           "name_en": "District Boundaries",     "name_th": "ขอบเขตอำเภอ",          "geom_type": "Polygon"},
     "tambon":           {"slug": "tambon",           "name_en": "Sub-district Boundaries", "name_th": "ขอบเขตตำบล",           "geom_type": "Polygon"},
     "worldpop":         {"slug": "worldpop",         "name_en": "Population (WorldPop 2020)", "name_th": "ประชากร (WorldPop 2020)", "geom_type": "Raster", "data_type": "raster"},
+    "srtm":             {"slug": "srtm",             "name_en": "Elevation (SRTM 30m)",      "name_th": "ความสูง (SRTM 30 ม.)",     "geom_type": "Raster", "data_type": "raster"},
 }
 
 # Layers that are stored as raster GeoTIFF instead of vector GeoJSON
-RASTER_LAYERS = {"worldpop"}
+RASTER_LAYERS = {"worldpop", "srtm"}
 
 DRIVER_MAP = {
     "shp": "ESRI Shapefile",

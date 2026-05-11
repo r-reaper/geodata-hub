@@ -81,6 +81,7 @@ const LAYERS: LayerInfo[] = [
   { slug: "temples",          name_en: "Temples",              name_th: "วัด",              geom_type: "Point",      feature_count: 0 },
   { slug: "pois",             name_en: "POIs",                 name_th: "สถานที่สำคัญ",     geom_type: "Point",      feature_count: 0 },
   { slug: "worldpop",         name_en: "Population (2020)",    name_th: "ประชากร (2020)",   geom_type: "Raster",     feature_count: 0 },
+  { slug: "srtm",             name_en: "Elevation (SRTM 30m)", name_th: "ความสูง (SRTM 30 ม.)", geom_type: "Raster", feature_count: 0 },
 ];
 
 const LAYER_COLORS: Record<string, string> = {
@@ -89,7 +90,7 @@ const LAYER_COLORS: Record<string, string> = {
   buildings:        "#F97316", landuse:   "#22C55E", natural:   "#14B8A6",
   parks:            "#16A34A", temples:   "#EAB308", pois:      "#EC4899",
   ms_buildings:     "#FB923C",                       google_buildings: "#FACC15",
-  worldpop:         "#DC2626",
+  worldpop:         "#DC2626",                       srtm:             "#78350F",
 };
 
 const QUICK_LOCATIONS = [
@@ -1386,6 +1387,36 @@ function EmailLoginModal({ onClose, onSubmit }: { onClose: () => void; onSubmit:
 // ── Credits / buy-pack modal
 function DonateModal({ onClose }: { onClose: () => void }) {
   const { t } = useT();
+  const [cardAmount, setCardAmount] = useState<number | "">(100);
+  const [cardLoading, setCardLoading] = useState(false);
+  const [cardErr, setCardErr] = useState<string | null>(null);
+
+  const handleCardDonate = async () => {
+    const n = typeof cardAmount === "number" ? cardAmount : parseInt(String(cardAmount), 10);
+    if (!n || n < 20) { setCardErr(t("donate.cardMin")); return; }
+    if (n > 50000) { setCardErr("Max ฿50,000"); return; }
+    setCardErr(null);
+    setCardLoading(true);
+    try {
+      const origin = typeof window !== "undefined" ? window.location.origin : "";
+      const r = await fetch(`${API_BASE}/payments/donate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount_thb:   n,
+          redirect_url: `${origin}/credits?success=1`,
+          cancel_url:   `${origin}/credits?canceled=1`,
+        }),
+      });
+      const d = await r.json();
+      if (!r.ok || !d.checkout_url) throw new Error(d?.detail || `HTTP ${r.status}`);
+      window.location.href = d.checkout_url;
+    } catch (e: any) {
+      setCardErr(e.message || String(e));
+      setCardLoading(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 overflow-y-auto" onClick={onClose}>
       <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 my-8" onClick={(e) => e.stopPropagation()}>
@@ -1421,7 +1452,62 @@ function DonateModal({ onClose }: { onClose: () => void }) {
           </div>
         </div>
 
-        {/* ─── International option ─── */}
+        {/* ─── Credit/debit card via Stripe ─── */}
+        <div className="mt-3 border border-slate-200 rounded-xl p-4">
+          <p className="text-xs text-slate-700 mb-2 font-medium">{t("donate.cardTitle")}</p>
+
+          {/* Preset amounts */}
+          <div className="grid grid-cols-4 gap-1.5 mb-2">
+            {[50, 100, 300, 500].map((amt) => (
+              <button
+                key={amt}
+                onClick={() => setCardAmount(amt)}
+                className={`py-1.5 text-sm rounded border transition ${
+                  cardAmount === amt
+                    ? "bg-blue-600 text-white border-blue-600"
+                    : "bg-white text-slate-700 border-slate-300 hover:bg-slate-50"
+                }`}
+              >
+                ฿{amt}
+              </button>
+            ))}
+          </div>
+
+          {/* Custom amount input */}
+          <div className="flex gap-1.5 mb-2">
+            <div className="relative flex-1">
+              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-sm pointer-events-none">฿</span>
+              <input
+                type="number"
+                inputMode="numeric"
+                min={20}
+                max={50000}
+                value={cardAmount === "" ? "" : cardAmount}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setCardAmount(v === "" ? "" : Math.max(0, parseInt(v, 10) || 0));
+                }}
+                placeholder={t("donate.cardCustomPh")}
+                className="w-full pl-6 pr-2 py-1.5 text-sm border border-slate-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+
+          <button
+            onClick={handleCardDonate}
+            disabled={cardLoading || !cardAmount || (cardAmount as number) < 20}
+            className="w-full py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-sm rounded transition"
+          >
+            {cardLoading
+              ? "Redirecting…"
+              : t("donate.cardPay", { n: typeof cardAmount === "number" ? cardAmount : "—" })}
+          </button>
+
+          {cardErr && <p className="text-[11px] text-red-600 mt-1">{cardErr}</p>}
+          <p className="text-[10px] text-slate-500 mt-1 font-light">{t("donate.cardHint")}</p>
+        </div>
+
+        {/* ─── International alternative ─── */}
         <div className="mt-3">
           <a
             href="https://www.buymeacoffee.com/kampanart"

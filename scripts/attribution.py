@@ -35,6 +35,7 @@ LAYER_SOURCES = {
     "ms_buildings":      "microsoft",
     "google_buildings":  "google",
     "worldpop":          "worldpop",
+    "srtm":              "nasa_srtm",
 }
 
 SOURCES = {
@@ -87,6 +88,19 @@ SOURCES = {
             "  • Give credit to WorldPop and University of Southampton\n"
             "  • Cite the WorldPop dataset in publications\n"
             "  • You CAN use this commercially"
+        ),
+    },
+    "nasa_srtm": {
+        "name":        "NASA SRTM (Shuttle Radar Topography Mission)",
+        "url":         "https://www.earthdata.nasa.gov/sensors/srtm",
+        "license":     "Public domain (U.S. Government work)",
+        "license_url": "https://www.usa.gov/government-works",
+        "attribution": "Elevation data: NASA SRTM",
+        "notes": (
+            "NASA SRTM 30m global digital elevation model. As a U.S.\n"
+            "government work, the data is in the public domain — you may\n"
+            "use it freely for any purpose, with or without attribution.\n"
+            "We still credit NASA as good practice."
         ),
     },
 }

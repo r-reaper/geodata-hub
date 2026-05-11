@@ -745,27 +745,33 @@ def _sync_data_from_r2():
     # Vector layers — prefer FlatGeobuf (.fgb), fall back to GeoJSON.
     # FGB is binary + indexed → much smaller transfer + lower memory usage.
     #
-    # FREE_TIER_LAYERS: only sync layers whose .geojson fits within Railway free
-    # tier's tight disk/memory budget (0.5 GB volume). Heavy layers (amphoe,
-    # roads, waterways, natural, landuse, ms_buildings, google_buildings,
-    # worldpop) are intentionally skipped so the container starts fast and
-    # doesn't run out of disk. Total of the kept set ≈ 311 MB.
+    # Railway Hobby plan budget (5 GB volume):
+    #   All 12 OSM layers (~2 GB GeoJSON)                       ≈ 2.0 GB
+    #   WorldPop raster (worldpop.tif)                          ≈ 0.25 GB
+    #   SRTM elevation (srtm.tif)                               ≈ 0.25 GB
+    #                                                    Total ≈ 2.5 GB
     #
-    # To enable more layers, upgrade Railway tier and add them to this list.
+    # ms_buildings (4.7 GB FGB) and google_buildings (17 GB FGB) are still
+    # skipped here because they alone exceed the budget when combined with
+    # OSM. Enable them by upgrading Railway tier and adding to this list,
+    # OR cropping them to major urban areas before re-uploading.
     vector_layers = [
-        "province",   # 152 MB — provincial admin
-        "tambon",     #  22 MB — sub-district admin
-        "buildings",  #  70 MB — OSM buildings (Microsoft / Google too big for free tier)
-        "temples",    #   8 MB — temples / shrines
-        "railways",   #   8 MB — railway lines
-        "parks",      #  25 MB — national parks
-        "pois",       #  26 MB — points of interest
+        "province",   # ~152 MB
+        "amphoe",     # ~350 MB
+        "tambon",     #  ~22 MB
+        "roads",      # ~332 MB
+        "waterways",  # ~289 MB
+        "railways",   #   ~8 MB
+        "buildings",  #  ~70 MB — OSM buildings (small subset)
+        "landuse",    # ~237 MB
+        "natural",    # ~488 MB
+        "parks",      #  ~25 MB
+        "temples",    #   ~8 MB
+        "pois",       #  ~26 MB
     ]
-    # Layers known but not synced on free tier (frontend will show "Coming soon"):
-    skipped_layers = ["amphoe", "roads", "waterways", "landuse", "natural",
-                      "ms_buildings", "google_buildings", "worldpop"]
+    skipped_layers = ["ms_buildings", "google_buildings"]  # too big for 5 GB
     for slug in skipped_layers:
-        log.info(f"Skipping {slug} on free tier (file too large)")
+        log.info(f"Skipping {slug} (file too large for current Railway plan)")
     for slug in vector_layers:
         local_fgb = data_dir / f"{slug}.fgb"
         local_gj = data_dir / f"{slug}.geojson"
@@ -796,9 +802,9 @@ def _sync_data_from_r2():
         elif needs_download_gj is False:
             log.info(f"Data OK (local matches R2): {slug}.geojson")
 
-    # Raster layers (.tif) — WorldPop is skipped on free tier (251 MB + rasterio heavy)
-    raster_layers: list = []  # disabled on free tier
-    # raster_layers = ["worldpop"]
+    # Raster layers (.tif). SRTM is registered in LAYER_METADATA but not synced
+    # until a fetcher with API key is run — see scripts/srtm_fetcher.py.
+    raster_layers = ["worldpop"]
     for slug in raster_layers:
         local = data_dir / f"{slug}.tif"
         needs = _r2_file_differs_from_local(f"data/{slug}.tif", local)

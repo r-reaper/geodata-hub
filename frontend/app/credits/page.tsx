@@ -11,8 +11,8 @@ export default function DonatePage() {
 
   const headline    = lang === "th" ? "สนับสนุน Thai GeoData Hub" : "Support Thai GeoData Hub";
   const tagline     = lang === "th"
-    ? "ดาวน์โหลดทั้งหมด ฟรี. การบริจาคช่วยให้เซิร์ฟเวอร์ทำงานต่อได้"
-    : "All downloads are free. Donations help keep the servers running.";
+    ? "ดาวน์โหลดทั้งหมดฟรี · ขอบคุณที่ช่วยให้เซิร์ฟเวอร์ทำงานต่อได้"
+    : "All downloads are free · thanks for keeping the lights on";
   const ptTitle     = lang === "th" ? "🇹🇭 พร้อมเพย์ (สำหรับผู้บริจาคชาวไทย)" : "🇹🇭 PromptPay (Thai donors)";
   const ptHelp      = lang === "th"
     ? "เปิดแอปธนาคาร เลือกพร้อมเพย์ และส่งจำนวนเงินที่ต้องการไปยัง:"

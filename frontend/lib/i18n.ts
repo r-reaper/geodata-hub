@@ -23,7 +23,7 @@ export type Lang = "en" | "th";
 const dict: Record<Lang, Record<string, string>> = {
   en: {
     "app.title":              "Thai GeoData Hub",
-    "app.tagline":            "Free OSM downloads · Donations welcome",
+    "app.tagline":            "Free Thai OSM downloads · Clip by area",
     "app.online":             "● Online",
     "app.offline":            "Backend unreachable",
 
@@ -96,8 +96,14 @@ const dict: Record<Lang, Record<string, string>> = {
 
     "donate.title":           "Support this project",
     "donate.subtitle":        "Downloads are free. Pick whichever option works for you.",
+    "donate.cardTitle":       "💳 Credit / Debit Card",
+    "donate.cardHint":        "Visa · Mastercard · JCB · secured by Stripe",
+    "donate.cardCustom":      "Custom amount",
+    "donate.cardCustomPh":    "Enter amount in THB",
+    "donate.cardPay":         "Donate ฿{n}",
+    "donate.cardMin":         "Minimum ฿20",
     "donate.bmac":            "☕ Buy Me a Coffee",
-    "donate.bmacHint":        "Credit card · Apple Pay · PayPal · works worldwide",
+    "donate.bmacHint":        "Apple Pay · PayPal · works worldwide",
     "donate.promptpay":       "🇹🇭 PromptPay",
     "donate.promptpayScan":   "Scan the QR with any Thai bank app",
     "donate.promptpayNumber": "Or send to phone number:",
@@ -155,7 +161,7 @@ const dict: Record<Lang, Record<string, string>> = {
 
   th: {
     "app.title":              "Thai GeoData Hub",
-    "app.tagline":            "ดาวน์โหลดข้อมูล OSM ฟรี · รับบริจาคได้",
+    "app.tagline":            "ดาวน์โหลดข้อมูล OSM ฟรี · เลือกพื้นที่ได้",
     "app.online":             "● ออนไลน์",
     "app.offline":            "เชื่อมต่อเซิร์ฟเวอร์ไม่ได้",
 
@@ -228,8 +234,14 @@ const dict: Record<Lang, Record<string, string>> = {
 
     "donate.title":           "สนับสนุนโปรเจกต์",
     "donate.subtitle":        "ดาวน์โหลดทั้งหมดฟรี เลือกช่องทางที่สะดวกที่สุด",
+    "donate.cardTitle":       "💳 บัตรเครดิต / เดบิต",
+    "donate.cardHint":        "Visa · Mastercard · JCB · ปลอดภัยด้วย Stripe",
+    "donate.cardCustom":      "จำนวนกำหนดเอง",
+    "donate.cardCustomPh":    "กรอกจำนวนเงิน (THB)",
+    "donate.cardPay":         "บริจาค ฿{n}",
+    "donate.cardMin":         "ขั้นต่ำ ฿20",
     "donate.bmac":            "☕ Buy Me a Coffee",
-    "donate.bmacHint":        "บัตรเครดิต · Apple Pay · PayPal · ใช้ได้ทั่วโลก",
+    "donate.bmacHint":        "Apple Pay · PayPal · ใช้ได้ทั่วโลก",
     "donate.promptpay":       "🇹🇭 พร้อมเพย์",
     "donate.promptpayScan":   "สแกน QR ด้วยแอปธนาคารใดก็ได้",
     "donate.promptpayNumber": "หรือโอนเข้าเบอร์:",
