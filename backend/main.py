@@ -610,11 +610,14 @@ def _sync_data_from_r2():
         else:
             log.warning(f"Could not download {slug}.tif — layer will be unavailable")
 
-    # Metadata files (small) — try to fetch for all known layers
+    # Metadata files (small) — ALWAYS re-download from R2 so feature_count
+    # stays in sync when we replace a layer's data. Files are <1 KB each so
+    # this adds negligible cold-start time.
     for slug in vector_layers + raster_layers:
         local_meta = data_dir / f"{slug}_metadata.json"
-        if not local_meta.exists():
-            download_file_from_s3(f"data/{slug}_metadata.json", str(local_meta))
+        ok = download_file_from_s3(f"data/{slug}_metadata.json", str(local_meta))
+        if ok:
+            log.info(f"Refreshed metadata: {slug}")
 
 
 @app.on_event("startup")
