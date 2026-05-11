@@ -341,38 +341,13 @@ def preview_aoi(request: ClipDataRequest):
 def clip_data(request: ClipDataRequest, background_tasks: BackgroundTasks):
     """
     Clip layers to AOI → upload ZIP to S3 → return presigned URL.
-    Checks and deducts credits before processing.
+
+    Donation-funded model: all downloads are FREE, no credit check.
+    The credits/Stripe code remains in payments.py for future re-enable
+    (e.g. premium tier / API access) but is not invoked here.
     """
     user_id = request.user_id
-
-    # ── Credit check ──
-    credits_needed = 0
-    if user_id:
-        # First calculate what we'll need (do preview internally)
-        try:
-            preview_results = clip_service.calculate_preview(
-                request.aoi.model_dump(), request.layers
-            )
-            total_features = sum(
-                r.get("feature_count", 0) for r in preview_results.values()
-                if isinstance(r, dict) and "feature_count" in r
-            )
-            total_mb = sum(
-                r.get("estimated_mb_shp", 0) for r in preview_results.values()
-                if isinstance(r, dict) and "estimated_mb_shp" in r
-            )
-            credits_needed = calculate_credits_needed(total_features, total_mb)
-        except Exception as e:
-            log.warning(f"Preview failed for credit calc: {e}")
-
-        # Deduct credits (atomic — works with both DB and file store)
-        if credits_needed > 0:
-            ok = deduct_credits_db(user_id, credits_needed)
-            if not ok:
-                raise HTTPException(
-                    status_code=402,
-                    detail=f"Insufficient credits. Need {credits_needed}, check /payments/credits/{user_id}",
-                )
+    credits_needed = 0  # always free
 
     # ── Validate target CRS ──
     ALLOWED_CRS = {"EPSG:4326", "EPSG:3857", "EPSG:32647", "EPSG:32648"}
@@ -769,9 +744,28 @@ def _sync_data_from_r2():
 
     # Vector layers — prefer FlatGeobuf (.fgb), fall back to GeoJSON.
     # FGB is binary + indexed → much smaller transfer + lower memory usage.
-    vector_layers = ["province", "amphoe", "tambon", "roads", "waterways", "railways",
-                     "buildings", "landuse", "natural", "parks", "temples", "pois",
-                     "ms_buildings", "google_buildings"]
+    #
+    # FREE_TIER_LAYERS: only sync layers whose .geojson fits within Railway free
+    # tier's tight disk/memory budget (0.5 GB volume). Heavy layers (amphoe,
+    # roads, waterways, natural, landuse, ms_buildings, google_buildings,
+    # worldpop) are intentionally skipped so the container starts fast and
+    # doesn't run out of disk. Total of the kept set ≈ 311 MB.
+    #
+    # To enable more layers, upgrade Railway tier and add them to this list.
+    vector_layers = [
+        "province",   # 152 MB — provincial admin
+        "tambon",     #  22 MB — sub-district admin
+        "buildings",  #  70 MB — OSM buildings (Microsoft / Google too big for free tier)
+        "temples",    #   8 MB — temples / shrines
+        "railways",   #   8 MB — railway lines
+        "parks",      #  25 MB — national parks
+        "pois",       #  26 MB — points of interest
+    ]
+    # Layers known but not synced on free tier (frontend will show "Coming soon"):
+    skipped_layers = ["amphoe", "roads", "waterways", "landuse", "natural",
+                      "ms_buildings", "google_buildings", "worldpop"]
+    for slug in skipped_layers:
+        log.info(f"Skipping {slug} on free tier (file too large)")
     for slug in vector_layers:
         local_fgb = data_dir / f"{slug}.fgb"
         local_gj = data_dir / f"{slug}.geojson"
@@ -802,8 +796,9 @@ def _sync_data_from_r2():
         elif needs_download_gj is False:
             log.info(f"Data OK (local matches R2): {slug}.geojson")
 
-    # Raster layers (.tif) — WorldPop and any future raster layers
-    raster_layers = ["worldpop"]
+    # Raster layers (.tif) — WorldPop is skipped on free tier (251 MB + rasterio heavy)
+    raster_layers: list = []  # disabled on free tier
+    # raster_layers = ["worldpop"]
     for slug in raster_layers:
         local = data_dir / f"{slug}.tif"
         needs = _r2_file_differs_from_local(f"data/{slug}.tif", local)
@@ -828,11 +823,28 @@ def _sync_data_from_r2():
 
 @app.on_event("startup")
 async def startup_event():
-    import asyncio
-    # Run data sync in a thread so we don't block the event loop
-    loop = asyncio.get_event_loop()
-    await loop.run_in_executor(None, _sync_data_from_r2)
-    # Ensure S3 bucket exists
+    """
+    Start fast. Health check needs to pass within Railway's 1-min retry window,
+    so we CANNOT block startup on the R2 sync (which can download hundreds of
+    MB and take minutes). Instead:
+
+      1. Return control immediately — /health responds 200 instantly.
+      2. Sync runs in a background thread; layers come online as files arrive.
+      3. /layers reports status="no_data" until each layer's file is on disk.
+    """
+    import threading
+
+    def _sync_in_background():
+        try:
+            log.info("Background R2 sync starting (non-blocking)")
+            _sync_data_from_r2()
+            log.info("Background R2 sync complete")
+        except Exception as e:
+            log.error(f"Background sync failed: {e}")
+
+    threading.Thread(target=_sync_in_background, daemon=True).start()
+
+    # Ensure S3 bucket exists (quick, non-blocking)
     if S3_AVAILABLE:
         try:
             from s3_storage import ensure_bucket_exists

@@ -644,19 +644,7 @@ export default function MapSelector() {
     const uid = uidOverride || userId;
     if (!aoi || selectedLayers.size === 0) return;
 
-    // Require login if any selected layer would cost credits
-    const needsCredits = creditsCost > 0;
-    if (needsCredits && !uid) {
-      setPendingAction("download");
-      setShowLogin(true);
-      return;
-    }
-    if (needsCredits && (credits ?? 0) < creditsCost) {
-      showToast(`Need ${creditsCost} credits — you have ${credits ?? 0}`, "error");
-      setShowCredits(true);
-      return;
-    }
-
+    // Donation model: all downloads are free; user_id only used for history.
     setFailedDownloadId(null);
     setLoadingDownload(true);
     try {
@@ -842,18 +830,15 @@ export default function MapSelector() {
             </span>
           )}
 
-          {/* Credits chip */}
-          {userId && (
-            <button
-              onClick={() => setShowCredits(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-900 font-medium text-xs transition"
-              title="Buy credits"
-            >
-              <span>💎</span>
-              <span>{credits === null ? "…" : credits.toLocaleString()}</span>
-              <span className="text-amber-700">credits</span>
-            </button>
-          )}
+          {/* Donate button */}
+          <button
+            onClick={() => setShowCredits(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-pink-50 hover:bg-pink-100 border border-pink-200 text-pink-900 font-medium text-xs transition"
+            title="Support the project"
+          >
+            <span>💝</span>
+            <span>Donate</span>
+          </button>
 
           {/* History button */}
           <button
@@ -1001,7 +986,8 @@ export default function MapSelector() {
           hint={!aoi ? "Define an area first" : `${selectedLayers.size} selected`}
         >
           <div className="space-y-1">
-            {layers.map((l) => {
+            {/* Hide layers that aren't available — keeps UI clean on free tier */}
+            {layers.filter((l) => l.status !== "no_data").map((l) => {
               const sel = selectedLayers.has(l.slug);
               const vis = visibleLayers.has(l.slug);
               const loading = loadingLayer === l.slug;
@@ -1121,9 +1107,7 @@ export default function MapSelector() {
                   <span className="text-xs font-medium text-slate-700">
                     Total: {totalPreviewFeatures.toLocaleString()}
                   </span>
-                  <span className={`text-xs font-bold ${creditsCost === 0 ? "text-emerald-700" : "text-amber-700"}`}>
-                    {creditsCost === 0 ? "FREE" : `${creditsCost} credits`}
-                  </span>
+                  <span className="text-xs font-bold text-emerald-700">FREE</span>
                 </div>
                 <div className="space-y-0.5 text-xs text-slate-600">
                   {Object.entries(preview).map(([slug, p]) => (
@@ -1133,14 +1117,6 @@ export default function MapSelector() {
                     </div>
                   ))}
                 </div>
-                {creditsCost > 0 && userId && (credits ?? 0) < creditsCost && (
-                  <button
-                    onClick={() => setShowCredits(true)}
-                    className="mt-2 w-full py-1.5 text-xs rounded bg-amber-100 hover:bg-amber-200 text-amber-900 font-medium"
-                  >
-                    Need more credits — buy now
-                  </button>
-                )}
               </div>
             )}
 
@@ -1165,7 +1141,7 @@ export default function MapSelector() {
               {loadingDownload ? <><Spinner light /> Preparing ZIP…</> : "⬇ Download ZIP"}
             </button>
             <p className="text-[11px] text-slate-500 text-center">
-              {creditsCost === 0 ? "Free for small areas" : `${creditsCost} credits will be charged`} · No login required for previews
+              100% free · Donations welcome 💝 · No login required
             </p>
           </div>
         </Section>
@@ -1245,12 +1221,7 @@ export default function MapSelector() {
       )}
 
       {showCredits && (
-        <CreditsModal
-          onClose={() => setShowCredits(false)}
-          onPick={(amount) => startCheckout(amount)}
-          currentCredits={credits ?? 0}
-          loggedIn={!!userId}
-        />
+        <DonateModal onClose={() => setShowCredits(false)} />
       )}
 
       {showHistory && (
@@ -1381,53 +1352,43 @@ function EmailLoginModal({ onClose, onSubmit }: { onClose: () => void; onSubmit:
 }
 
 // ── Credits / buy-pack modal
-function CreditsModal({
-  onClose, onPick, currentCredits, loggedIn,
-}: {
-  onClose: () => void;
-  onPick: (amount: number) => void;
-  currentCredits: number;
-  loggedIn: boolean;
-}) {
+function DonateModal({ onClose }: { onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full p-6" onClick={(e) => e.stopPropagation()}>
-        <div className="flex justify-between items-start mb-4">
+      <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
+        <div className="flex justify-between items-start mb-3">
           <div>
-            <h2 className="text-xl font-bold text-slate-900">Buy credits</h2>
+            <h2 className="text-xl font-bold text-slate-900">Support this project 💝</h2>
             <p className="text-sm text-slate-600 mt-0.5">
-              {loggedIn
-                ? `You have ${currentCredits.toLocaleString()} credits. Credits never expire.`
-                : "Sign in first to purchase credits. Credits never expire."}
+              All downloads are <strong>free</strong>. If this tool saved you time, a small donation keeps the servers running.
             </p>
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-700 text-xl leading-none">×</button>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {CREDIT_PACKS.map((p) => (
-            <button
-              key={p.credits}
-              onClick={() => onPick(p.credits)}
-              className={`relative text-left p-4 rounded-lg border-2 transition ${p.popular ? "border-blue-500 bg-blue-50 hover:bg-blue-100" : "border-slate-200 hover:border-blue-400 bg-white"}`}
-            >
-              {p.popular && (
-                <span className="absolute -top-2 left-3 px-2 py-0.5 bg-blue-600 text-white text-[10px] font-bold rounded-full">
-                  POPULAR
-                </span>
-              )}
-              <div className="text-xs font-medium text-slate-500 uppercase tracking-wide">{p.label}</div>
-              <div className="text-2xl font-bold text-slate-900 mt-1">{p.credits.toLocaleString()}</div>
-              <div className="text-xs text-slate-500">credits</div>
-              <div className="mt-2 text-lg font-bold text-blue-700">฿{p.price_thb.toLocaleString()}</div>
-              <div className="text-[10px] text-slate-500 mt-1">{p.hint}</div>
-            </button>
-          ))}
-        </div>
+        <div className="space-y-3 mt-4">
+          <a
+            href="https://www.buymeacoffee.com/kampanart"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-center gap-2 w-full py-3 px-4 bg-yellow-400 hover:bg-yellow-500 text-slate-900 font-bold rounded-lg transition"
+          >
+            ☕ Buy Me a Coffee
+          </a>
 
-        <p className="mt-4 text-xs text-slate-500 text-center">
-          Secure payment by Stripe · Visa, Mastercard, JCB · Thai Baht (THB)
-        </p>
+          <div className="border border-slate-200 rounded-lg p-3 bg-slate-50">
+            <p className="text-xs font-medium text-slate-700 mb-2">🇹🇭 PromptPay (Thai donors)</p>
+            <p className="text-sm text-slate-900 font-mono">kamp.guitar@gmail.com</p>
+            <p className="text-[11px] text-slate-500 mt-1">
+              Open your bank app → PromptPay → enter the email above as recipient.
+            </p>
+          </div>
+
+          <div className="text-center text-xs text-slate-500 pt-2 border-t border-slate-100">
+            <p>Any amount welcome 🙏</p>
+            <p className="mt-1">Made with ❤️ in Thailand for the GIS community.</p>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -1509,7 +1470,7 @@ function IntroModal({ onClose }: { onClose: () => void }) {
             { n: 1, t: "Find your area", d: "Search a city or jump to Bangkok / Chiang Mai / Phuket / Pattaya." },
             { n: 2, t: "Define your AOI", d: "Draw a polygon on the map, or upload a GeoJSON / KML." },
             { n: 3, t: "Pick layers", d: "Roads, buildings, waterways, POIs, admin boundaries — 12 layers in total." },
-            { n: 4, t: "Download ZIP", d: "Free for small areas. Pay credits for bulk extracts. SHP, GeoJSON, KML included." },
+            { n: 4, t: "Download ZIP", d: "100% free — SHP, GeoJSON, KML included with proper attribution files. Donations welcome 💝" },
           ].map((s) => (
             <div key={s.n} className="flex gap-3">
               <span className="flex-shrink-0 w-7 h-7 rounded-full bg-blue-600 text-white text-sm font-bold flex items-center justify-center">{s.n}</span>
