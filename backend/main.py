@@ -554,6 +554,30 @@ def refresh_layer_background(layer_slug: str):
         log.error(f"Refresh failed for {layer_slug}: {e}")
 
 
+def _r2_file_differs_from_local(s3_key: str, local_path: "Path") -> Optional[bool]:
+    """Compare R2 object size with local file size.
+
+    Returns:
+        True  → need to download (local missing or sizes differ)
+        False → up-to-date, skip download
+        None  → R2 doesn't have this file (also skip — there's nothing to download)
+    """
+    if not S3_AVAILABLE:
+        return None
+    try:
+        from s3_storage import get_s3_client, S3_BUCKET_NAME
+        client = get_s3_client()
+        head = client.head_object(Bucket=S3_BUCKET_NAME, Key=s3_key)
+        r2_size = head["ContentLength"]
+    except Exception:
+        # 404 / 403 / etc — file doesn't exist in R2
+        return None
+    if not local_path.exists():
+        return True
+    local_size = local_path.stat().st_size
+    return local_size != r2_size
+
+
 def _sync_data_from_r2():
     """
     On startup: download any missing GeoJSON layer files from R2.
@@ -579,36 +603,46 @@ def _sync_data_from_r2():
     for slug in vector_layers:
         local_fgb = data_dir / f"{slug}.fgb"
         local_gj = data_dir / f"{slug}.geojson"
-        if local_fgb.exists() or local_gj.exists():
-            log.info(f"Data OK (local): {slug}")
+        # Determine if we need to download by comparing local size with R2 size.
+        # This catches the case where a layer was replaced with a bigger
+        # version (e.g. google_buildings 1.2 GB → 17 GB).
+        needs_download_fgb = _r2_file_differs_from_local(f"data/{slug}.fgb", local_fgb)
+        if needs_download_fgb is True:
+            log.info(f"Downloading {slug}.fgb (size mismatch or missing) ...")
+            if download_file_from_s3(f"data/{slug}.fgb", str(local_fgb)):
+                log.info(f"Downloaded {slug}.fgb")
+                # If we got .fgb, remove any stale .geojson to avoid confusion
+                if local_gj.exists():
+                    try: local_gj.unlink()
+                    except: pass
+                continue
+        elif needs_download_fgb is False:
+            log.info(f"Data OK (local matches R2): {slug}.fgb")
             continue
-        # Try .fgb first (preferred)
-        log.info(f"Trying {slug}.fgb from R2 ...")
-        ok = download_file_from_s3(f"data/{slug}.fgb", str(local_fgb))
-        if ok:
-            log.info(f"Downloaded {slug}.fgb (FlatGeobuf)")
-            continue
-        # Fall back to .geojson
-        log.info(f"  no .fgb, trying {slug}.geojson ...")
-        ok = download_file_from_s3(f"data/{slug}.geojson", str(local_gj))
-        if ok:
-            log.info(f"Downloaded {slug}.geojson")
-        else:
-            log.warning(f"Could not download {slug} — layer will be unavailable")
+        # No .fgb in R2 — fall back to .geojson
+        needs_download_gj = _r2_file_differs_from_local(f"data/{slug}.geojson", local_gj)
+        if needs_download_gj is True:
+            log.info(f"Downloading {slug}.geojson ...")
+            if download_file_from_s3(f"data/{slug}.geojson", str(local_gj)):
+                log.info(f"Downloaded {slug}.geojson")
+            else:
+                log.warning(f"Could not download {slug} — layer will be unavailable")
+        elif needs_download_gj is False:
+            log.info(f"Data OK (local matches R2): {slug}.geojson")
 
     # Raster layers (.tif) — WorldPop and any future raster layers
     raster_layers = ["worldpop"]
     for slug in raster_layers:
         local = data_dir / f"{slug}.tif"
-        if local.exists():
-            log.info(f"Data OK (local): {slug}.tif")
-            continue
-        log.info(f"Downloading {slug}.tif from R2 ...")
-        ok = download_file_from_s3(f"data/{slug}.tif", str(local))
-        if ok:
-            log.info(f"Downloaded {slug}.tif")
-        else:
-            log.warning(f"Could not download {slug}.tif — layer will be unavailable")
+        needs = _r2_file_differs_from_local(f"data/{slug}.tif", local)
+        if needs is True:
+            log.info(f"Downloading {slug}.tif ...")
+            if download_file_from_s3(f"data/{slug}.tif", str(local)):
+                log.info(f"Downloaded {slug}.tif")
+            else:
+                log.warning(f"Could not download {slug}.tif")
+        elif needs is False:
+            log.info(f"Data OK (local matches R2): {slug}.tif")
 
     # Metadata files (small) — ALWAYS re-download from R2 so feature_count
     # stays in sync when we replace a layer's data. Files are <1 KB each so
