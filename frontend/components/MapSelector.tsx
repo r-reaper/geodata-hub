@@ -232,6 +232,7 @@ export default function MapSelector() {
   const [pendingAction, setPendingAction] = useState<null | "download" | "buy">(null);
   const [layerInfoSlug, setLayerInfoSlug] = useState<string | null>(null);
   const [targetCrs, setTargetCrs] = useState<string>("EPSG:4326");
+  const [showDownloadPrompt, setShowDownloadPrompt] = useState(false);
 
   // ─────────────────────────────────────────────
   // Toast queue
@@ -1146,7 +1147,11 @@ export default function MapSelector() {
             )}
 
             <button
-              onClick={() => runDownload()}
+              onClick={() => {
+                if (!canDownload) return;
+                // Show the donate nudge first; user picks Continue or Donate.
+                setShowDownloadPrompt(true);
+              }}
               disabled={!canDownload}
               className="w-full py-3 px-3 text-sm rounded-md font-medium bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white shadow-sm flex items-center justify-center gap-2"
             >
@@ -1262,6 +1267,20 @@ export default function MapSelector() {
         />
       )}
 
+      {showDownloadPrompt && (
+        <PreDownloadPrompt
+          onClose={() => setShowDownloadPrompt(false)}
+          onContinue={() => {
+            setShowDownloadPrompt(false);
+            runDownload();
+          }}
+          onDonate={() => {
+            setShowDownloadPrompt(false);
+            setShowCredits(true);
+          }}
+        />
+      )}
+
       {loadingDownload && <DownloadProgressOverlay />}
 
       {/* CSS for loading bar animation */}
@@ -1368,42 +1387,152 @@ function EmailLoginModal({ onClose, onSubmit }: { onClose: () => void; onSubmit:
 function DonateModal({ onClose }: { onClose: () => void }) {
   const { t } = useT();
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
-        <div className="flex justify-between items-start mb-3">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 overflow-y-auto" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 my-8" onClick={(e) => e.stopPropagation()}>
+        <div className="flex justify-between items-start mb-4">
           <div>
             <h2 className="text-xl text-slate-900 font-medium">{t("donate.title")}</h2>
-            <p className="text-sm text-slate-600 mt-0.5 font-light">
-              {t("donate.subtitle")}
-            </p>
+            <p className="text-sm text-slate-600 mt-0.5 font-light">{t("donate.subtitle")}</p>
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-700 text-xl leading-none">×</button>
         </div>
 
-        <div className="space-y-3 mt-4">
+        {/* ─── PromptPay (Thai, primary) ─── */}
+        <div className="border border-slate-200 rounded-xl p-4 bg-slate-50">
+          <p className="text-xs text-slate-700 mb-3 font-medium">{t("donate.promptpay")}</p>
+
+          <div className="flex justify-center mb-3">
+            <img
+              src="/promptpay-qr.png"
+              alt="PromptPay QR code"
+              width={220}
+              height={220}
+              className="rounded-lg border border-slate-200 bg-white"
+              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+            />
+          </div>
+
+          <p className="text-[11px] text-slate-500 mb-2 text-center font-light">{t("donate.promptpayScan")}</p>
+
+          <div className="bg-white border border-slate-200 rounded-lg p-2.5 text-center">
+            <div className="text-[10px] text-slate-500 mb-0.5 font-light">{t("donate.promptpayNumber")}</div>
+            <div className="font-mono text-lg text-slate-900 tracking-wider">083-256-2524</div>
+            <div className="text-[10px] text-slate-500 mt-1 font-light">{t("donate.promptpayAccount")}</div>
+          </div>
+        </div>
+
+        {/* ─── International option ─── */}
+        <div className="mt-3">
           <a
             href="https://www.buymeacoffee.com/kampanart"
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center justify-center gap-2 w-full py-3 px-4 bg-yellow-400 hover:bg-yellow-500 text-slate-900 font-medium rounded-lg transition"
+            className="flex flex-col items-center justify-center gap-0.5 w-full py-3 px-4 bg-yellow-400 hover:bg-yellow-500 text-slate-900 font-medium rounded-lg transition"
           >
-            {t("donate.bmac")}
+            <span>{t("donate.bmac")}</span>
+            <span className="text-[10px] font-light opacity-80">{t("donate.bmacHint")}</span>
           </a>
+        </div>
 
-          <div className="border border-slate-200 rounded-lg p-3 bg-slate-50">
-            <p className="text-xs text-slate-700 mb-2">{t("donate.promptpay")}</p>
-            <p className="text-sm text-slate-900 font-mono">kamp.guitar@gmail.com</p>
-            <p className="text-[11px] text-slate-500 mt-1 font-light">
-              {t("donate.promptpayHint")}
-            </p>
+        {/* ─── Free ways to support ─── */}
+        <div className="mt-4 pt-3 border-t border-slate-100">
+          <p className="text-xs text-slate-700 mb-2 font-medium">{t("donate.altTitle")}</p>
+          <div className="space-y-1.5">
+            <ShareButton label={t("donate.altShare")} />
+            <a
+              href="https://github.com/r-reaper/geodata-hub"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-center gap-2 w-full py-1.5 px-3 text-xs text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 rounded-md font-light"
+            >
+              {t("donate.altStar")}
+            </a>
+            <a
+              href="https://github.com/r-reaper/geodata-hub/issues/new"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-center gap-2 w-full py-1.5 px-3 text-xs text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 rounded-md font-light"
+            >
+              {t("donate.altReport")}
+            </a>
           </div>
+        </div>
 
-          <div className="text-center text-xs text-slate-500 pt-2 border-t border-slate-100 font-light">
-            <p>{t("donate.footer")}</p>
-          </div>
+        <p className="mt-4 text-[11px] text-slate-500 text-center font-light">
+          {t("donate.footer")}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ── Pre-download donate nudge ─────────────────
+// Shown when user clicks the green "Download" button. Two clear actions:
+// (1) Continue → starts the actual /clip-data download
+// (2) Donate   → opens the full DonateModal (user can return and click again)
+function PreDownloadPrompt({
+  onClose, onContinue, onDonate,
+}: {
+  onClose: () => void;
+  onContinue: () => void;
+  onDonate: () => void;
+}) {
+  const { t } = useT();
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-2xl max-w-sm w-full p-6" onClick={(e) => e.stopPropagation()}>
+        <div className="text-center mb-4">
+          <div className="text-3xl mb-2">💝</div>
+          <h2 className="text-lg text-slate-900 font-medium">{t("predownload.title")}</h2>
+          <p className="text-sm text-slate-600 mt-1 font-light">{t("predownload.subtitle")}</p>
+        </div>
+
+        <div className="space-y-2">
+          {/* Primary action — Continue download */}
+          <button
+            onClick={onContinue}
+            autoFocus
+            className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white text-sm rounded-md font-medium transition"
+          >
+            {t("predownload.continue")}
+          </button>
+
+          {/* Secondary — Donate */}
+          <button
+            onClick={onDonate}
+            className="w-full py-2.5 px-4 bg-pink-50 hover:bg-pink-100 border border-pink-200 text-pink-900 text-sm rounded-md transition"
+          >
+            {t("predownload.donate")}
+          </button>
         </div>
       </div>
     </div>
+  );
+}
+
+function ShareButton({ label }: { label: string }) {
+  const onShare = async () => {
+    const url = typeof window !== "undefined" ? window.location.origin : "";
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: "Thai GeoData Hub",
+          text: "Free Thai OSM downloads with AOI clipping",
+          url,
+        });
+      } else {
+        await navigator.clipboard.writeText(url);
+        alert("Link copied to clipboard!");
+      }
+    } catch {}
+  };
+  return (
+    <button
+      onClick={onShare}
+      className="flex items-center justify-center gap-2 w-full py-1.5 px-3 text-xs text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 rounded-md font-light"
+    >
+      {label}
+    </button>
   );
 }
 
