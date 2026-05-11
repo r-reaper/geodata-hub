@@ -94,8 +94,8 @@ const dict: Record<Lang, Record<string, string>> = {
     "login.continue":         "Continue",
     "login.privacy":          "We never email marketing. Your email is used as your account ID only.",
 
-    "donate.title":           "Support this project",
-    "donate.subtitle":        "Downloads are free. Pick whichever option works for you.",
+    "donate.title":           "☕ Buy Me a Coffee · 🇹🇭 PromptPay · 💳 Card",
+    "donate.subtitle":        "Downloads are free. For coffee, use the yellow button in the header. Or use one below.",
     "donate.cardTitle":       "💳 Credit / Debit Card",
     "donate.cardHint":        "Visa · Mastercard · JCB · secured by Stripe",
     "donate.cardCustom":      "Custom amount",
@@ -157,6 +157,13 @@ const dict: Record<Lang, Record<string, string>> = {
     "details.loading":        "Loading layer details…",
 
     "credits.button":         "Need more credits — buy now",
+
+    // Changelog / version
+    "changelog.title":        "What's new",
+    "changelog.subtitle":     "Recent updates to Thai GeoData Hub",
+    "changelog.viewAll":      "View on GitHub →",
+    "changelog.close":        "Close",
+    "changelog.badgeNew":     "NEW",
   },
 
   th: {
@@ -232,8 +239,8 @@ const dict: Record<Lang, Record<string, string>> = {
     "login.continue":         "ดำเนินการต่อ",
     "login.privacy":          "เราไม่ส่งอีเมลโฆษณา อีเมลใช้เป็น ID ของบัญชีเท่านั้น",
 
-    "donate.title":           "สนับสนุนโปรเจกต์",
-    "donate.subtitle":        "ดาวน์โหลดทั้งหมดฟรี เลือกช่องทางที่สะดวกที่สุด",
+    "donate.title":           "☕ Buy Me a Coffee · 🇹🇭 พร้อมเพย์ · 💳 บัตรเครดิต",
+    "donate.subtitle":        "ดาวน์โหลดทุกอย่างฟรี · กดปุ่ม Buy Me a Coffee สีเหลืองที่ด้านบน หรือเลือกช่องทางด้านล่าง",
     "donate.cardTitle":       "💳 บัตรเครดิต / เดบิต",
     "donate.cardHint":        "Visa · Mastercard · JCB · ปลอดภัยด้วย Stripe",
     "donate.cardCustom":      "จำนวนกำหนดเอง",
@@ -295,6 +302,13 @@ const dict: Record<Lang, Record<string, string>> = {
     "details.loading":        "กำลังโหลดข้อมูลชั้น…",
 
     "credits.button":         "ต้องการเครดิตเพิ่ม — ซื้อเลย",
+
+    // Changelog / version
+    "changelog.title":        "มีอะไรใหม่",
+    "changelog.subtitle":     "อัปเดตล่าสุดของ Thai GeoData Hub",
+    "changelog.viewAll":      "ดูบน GitHub →",
+    "changelog.close":        "ปิด",
+    "changelog.badgeNew":     "ใหม่",
   },
 };
 

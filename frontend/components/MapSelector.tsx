@@ -9,6 +9,7 @@ import React, { useState, useRef, useCallback, useEffect } from "react";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { useT, type Lang } from "../lib/i18n";
+import { APP_VERSION, CHANGELOG } from "../lib/changelog";
 
 // ─────────────────────────────────────────────
 // Types
@@ -109,10 +110,11 @@ const CREDIT_PACKS = [
 ];
 
 const STORAGE = {
-  email:     "geodata_email",
-  aoi:       "geodata_aoi",
-  seenIntro: "geodata_seen_intro",
-  crs:       "geodata_target_crs",
+  email:       "geodata_email",
+  aoi:         "geodata_aoi",
+  seenIntro:   "geodata_seen_intro",
+  crs:         "geodata_target_crs",
+  seenVersion: "geodata_seen_version",
 };
 
 const CRS_OPTIONS = [
@@ -235,6 +237,8 @@ export default function MapSelector() {
   const [layerInfoSlug, setLayerInfoSlug] = useState<string | null>(null);
   const [targetCrs, setTargetCrs] = useState<string>("EPSG:4326");
   const [showDownloadPrompt, setShowDownloadPrompt] = useState(false);
+  const [showChangelog, setShowChangelog] = useState(false);
+  const [hasUnseenChangelog, setHasUnseenChangelog] = useState(false);
 
   // ─────────────────────────────────────────────
   // Toast queue
@@ -255,7 +259,16 @@ export default function MapSelector() {
     if (!localStorage.getItem(STORAGE.seenIntro)) setShowIntro(true);
     const savedCrs = localStorage.getItem(STORAGE.crs);
     if (savedCrs && CRS_OPTIONS.some((o) => o.code === savedCrs)) setTargetCrs(savedCrs);
+    // Show "NEW" badge if user hasn't seen the current version's changelog
+    const seenVersion = localStorage.getItem(STORAGE.seenVersion);
+    if (seenVersion !== APP_VERSION) setHasUnseenChangelog(true);
   }, []);
+
+  const openChangelog = () => {
+    setShowChangelog(true);
+    setHasUnseenChangelog(false);
+    try { localStorage.setItem(STORAGE.seenVersion, APP_VERSION); } catch {}
+  };
 
   const refreshCredits = useCallback(async (uid: string | null = userId) => {
     if (!uid) { setCredits(null); return; }
@@ -837,13 +850,25 @@ export default function MapSelector() {
             </span>
           )}
 
-          {/* Donate button */}
+          {/* Primary CTA — direct Buy Me a Coffee link, big and yellow */}
+          <a
+            href="https://www.buymeacoffee.com/kampanart"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-md bg-yellow-400 hover:bg-yellow-500 text-slate-900 font-medium text-sm transition shadow-sm border-2 border-yellow-500"
+            title="Buy Me a Coffee"
+          >
+            <span className="text-base">☕</span>
+            <span>Buy Me a Coffee</span>
+          </a>
+
+          {/* Secondary — discreet "other ways" link to open the modal with PromptPay + Card */}
           <button
             onClick={() => setShowCredits(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-pink-50 hover:bg-pink-100 border border-pink-200 text-pink-900 text-xs transition"
-            title={t("donate.title")}
+            className="px-2 py-1.5 rounded-md hover:bg-slate-100 text-slate-500 hover:text-slate-700 text-xs"
+            title="Other donation methods (PromptPay, Card)"
           >
-            {t("btn.donate")}
+            ⋯
           </button>
 
           {/* History button */}
@@ -863,6 +888,20 @@ export default function MapSelector() {
           >
             {t("btn.sources")}
           </a>
+
+          {/* Version + What's New */}
+          <button
+            onClick={openChangelog}
+            className="relative px-2 py-1.5 rounded-md hover:bg-slate-100 text-slate-500 text-[11px] font-mono"
+            title={t("changelog.title")}
+          >
+            v{APP_VERSION}
+            {hasUnseenChangelog && (
+              <span className="absolute -top-1 -right-1 px-1 py-0 rounded-full bg-pink-500 text-white text-[8px] font-bold leading-tight">
+                {t("changelog.badgeNew")}
+              </span>
+            )}
+          </button>
 
           {/* Language toggle */}
           <button
@@ -1261,6 +1300,10 @@ export default function MapSelector() {
         />
       )}
 
+      {showChangelog && (
+        <ChangelogModal onClose={() => setShowChangelog(false)} />
+      )}
+
       {layerInfoSlug && (
         <LayerDetailsModal
           slug={layerInfoSlug}
@@ -1508,18 +1551,7 @@ function DonateModal({ onClose }: { onClose: () => void }) {
           <p className="text-[10px] text-slate-500 mt-1 font-light">{t("donate.cardHint")}</p>
         </div>
 
-        {/* ─── International alternative ─── */}
-        <div className="mt-3">
-          <a
-            href="https://www.buymeacoffee.com/kampanart"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex flex-col items-center justify-center gap-0.5 w-full py-3 px-4 bg-yellow-400 hover:bg-yellow-500 text-slate-900 font-medium rounded-lg transition"
-          >
-            <span>{t("donate.bmac")}</span>
-            <span className="text-[10px] font-light opacity-80">{t("donate.bmacHint")}</span>
-          </a>
-        </div>
+        {/* BMaC moved to header. The modal title mentions it as a hint. */}
 
         {/* ─── Free ways to support ─── */}
         <div className="mt-4 pt-3 border-t border-slate-100">
@@ -1548,6 +1580,77 @@ function DonateModal({ onClose }: { onClose: () => void }) {
         <p className="mt-4 text-[11px] text-slate-500 text-center font-light">
           {t("donate.footer")}
         </p>
+      </div>
+    </div>
+  );
+}
+
+// ── Changelog / "What's new" modal ────────────
+// Driven by frontend/lib/changelog.ts. Click the version chip in the header
+// to open it. The pink "NEW" badge disappears after first open (tracked in
+// localStorage under STORAGE.seenVersion).
+function ChangelogModal({ onClose }: { onClose: () => void }) {
+  const { t, lang } = useT();
+  const TAG_STYLES: Record<string, string> = {
+    feature: "bg-blue-100 text-blue-800",
+    fix:     "bg-emerald-100 text-emerald-800",
+    data:    "bg-purple-100 text-purple-800",
+  };
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 overflow-y-auto" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full p-6 my-8" onClick={(e) => e.stopPropagation()}>
+        <div className="flex justify-between items-start mb-4">
+          <div>
+            <h2 className="text-xl text-slate-900 font-medium">{t("changelog.title")}</h2>
+            <p className="text-xs text-slate-500 mt-0.5 font-light">{t("changelog.subtitle")}</p>
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-700 text-xl leading-none">×</button>
+        </div>
+
+        <div className="space-y-5 max-h-[60vh] overflow-y-auto pr-1">
+          {CHANGELOG.map((entry) => {
+            const title = lang === "th" ? entry.title_th : entry.title_en;
+            const items = lang === "th" ? entry.items_th : entry.items_en;
+            return (
+              <div key={entry.version}>
+                <div className="flex items-baseline gap-2 mb-1.5">
+                  <span className="text-sm font-mono text-slate-900 font-medium">v{entry.version}</span>
+                  {entry.tag && (
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded ${TAG_STYLES[entry.tag] || "bg-slate-100 text-slate-700"}`}>
+                      {entry.tag.toUpperCase()}
+                    </span>
+                  )}
+                  <span className="text-[11px] text-slate-400 font-light">{entry.date}</span>
+                </div>
+                <p className="text-sm text-slate-900 mb-1.5">{title}</p>
+                <ul className="space-y-0.5">
+                  {items.map((it, i) => (
+                    <li key={i} className="text-xs text-slate-700 leading-relaxed font-light pl-1">
+                      {it}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="mt-5 flex justify-between items-center pt-3 border-t border-slate-100">
+          <a
+            href="https://github.com/r-reaper/geodata-hub/commits/main"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-blue-600 hover:underline font-light"
+          >
+            {t("changelog.viewAll")}
+          </a>
+          <button
+            onClick={onClose}
+            className="px-4 py-1.5 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm"
+          >
+            {t("changelog.close")}
+          </button>
+        </div>
       </div>
     </div>
   );
