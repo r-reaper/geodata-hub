@@ -8,6 +8,7 @@
 import React, { useState, useRef, useCallback, useEffect } from "react";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
+import { useT, type Lang } from "../lib/i18n";
 
 // ─────────────────────────────────────────────
 // Types
@@ -184,6 +185,9 @@ function isValidEmail(s: string): boolean {
 // ─────────────────────────────────────────────
 
 export default function MapSelector() {
+  // ── i18n
+  const { t, lang, toggle: toggleLang } = useT();
+
   // ── Refs
   const mapContainer = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
@@ -275,7 +279,7 @@ export default function MapSelector() {
     localStorage.setItem(STORAGE.email, e);
     setUserId(e);
     setShowLogin(false);
-    showToast(`Signed in as ${e}`, "success");
+    showToast(t("toast.signedIn", { email: e }), "success");
     // After login, resume any pending action
     if (pendingAction === "download") setTimeout(() => runDownload(e), 100);
     if (pendingAction === "buy") setTimeout(() => setShowCredits(true), 100);
@@ -287,7 +291,7 @@ export default function MapSelector() {
     setUserId(null);
     setCredits(null);
     setHistory(null);
-    showToast("Signed out", "info");
+    showToast(t("toast.signedOut"), "info");
   };
 
   // ─────────────────────────────────────────────
@@ -412,7 +416,7 @@ export default function MapSelector() {
       drawing.onDbl = (e: mapboxgl.MapMouseEvent) => {
         e.preventDefault();
         if (drawing.points.length < 3) {
-          showToast("Click at least 3 points to draw a polygon", "info");
+          showToast(t("toast.minPoints"), "info");
           return;
         }
         const coords = [...drawing.points, drawing.points[0]];
@@ -423,11 +427,11 @@ export default function MapSelector() {
         src?.setData({ type: "FeatureCollection", features: [feat] });
         cleanup();
         setIsDrawing(false);
-        showToast("Area defined — now select layers", "success");
+        showToast(t("toast.areaDefined"), "success");
       };
 
       drawing.onKey = (e: KeyboardEvent) => {
-        if (e.key === "Escape") { cleanup(); setIsDrawing(false); showToast("Drawing cancelled", "info"); }
+        if (e.key === "Escape") { cleanup(); setIsDrawing(false); showToast(t("toast.cancelled"), "info"); }
       };
 
       map.on("click", drawing.onClick);
@@ -488,7 +492,7 @@ export default function MapSelector() {
     if (visibleLayersRef.current.has(slug)) return;
 
     setLoadingLayer(slug);
-    showToast(`Loading ${slug}…`, "info", 2500);
+    showToast(t("toast.layerLoading", { layer: slug }), "info", 2500);
     try {
       const b = map.getBounds();
       const bbox = b ? `bbox=${b.getWest()},${b.getSouth()},${b.getEast()},${b.getNorth()}&` : "";
@@ -498,7 +502,7 @@ export default function MapSelector() {
         throw new Error(err);
       }
       const fc = await r.json();
-      if (!fc.features?.length) { showToast(`${slug}: no features in current view — zoom out`, "info"); return; }
+      if (!fc.features?.length) { showToast(t("toast.layerNoView", { layer: slug }), "info"); return; }
 
       const sourceId = `prv-${slug}`;
       const layerId = `prv-${slug}-layer`;
@@ -551,7 +555,7 @@ export default function MapSelector() {
     const text = await file.text();
     const feat = parseAOIFile(text, file.name);
     if (!feat) {
-      showToast("Could not parse AOI from file. Use GeoJSON Polygon or KML.", "error");
+      showToast(t("toast.parseFail"), "error");
       return;
     }
     setAoi(feat);
@@ -561,7 +565,7 @@ export default function MapSelector() {
     const lons = coords.map((c) => c[0]);
     const lats = coords.map((c) => c[1]);
     mapRef.current?.fitBounds([[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]], { padding: 60 });
-    showToast(`Loaded AOI from ${file.name}`, "success");
+    showToast(t("toast.aoiLoaded", { file: file.name }), "success");
     e.target.value = "";
   };
 
@@ -634,7 +638,7 @@ export default function MapSelector() {
       const data = await r.json();
       setPreview(data.layers);
     } catch (e: any) {
-      showToast(`Preview failed: ${e.message || e}`, "error");
+      showToast(t("toast.previewFail", { err: e.message || String(e) }), "error");
     } finally {
       setLoadingPreview(false);
     }
@@ -668,7 +672,7 @@ export default function MapSelector() {
       setFailedDownloadId(null);
       if (data.presigned_url) {
         window.open(data.presigned_url, "_blank");
-        showToast(`Downloading ${data.filename}`, "success");
+        showToast(t("toast.downloadOk", { file: data.filename }), "success");
       } else if (data.download_id) {
         window.open(`${API_BASE}/download/${data.download_id}`, "_blank");
       }
@@ -677,7 +681,7 @@ export default function MapSelector() {
       // Refresh history if drawer is open
       if (showHistory && uid) loadHistory(uid);
     } catch (e: any) {
-      showToast(`Download failed: ${e.message || e}`, "error");
+      showToast(t("toast.downloadFail", { err: e.message || String(e) }), "error");
     } finally {
       setLoadingDownload(false);
     }
@@ -702,7 +706,7 @@ export default function MapSelector() {
 
   const openHistory = () => {
     if (!userId) {
-      showToast("Sign in to see your download history", "info");
+      showToast(t("history.signinFirst"), "info");
       setShowLogin(true);
       return;
     }
@@ -721,10 +725,10 @@ export default function MapSelector() {
       const data = await r.json();
       if (!r.ok) throw new Error(data?.detail || `HTTP ${r.status}`);
       window.open(data.presigned_url, "_blank");
-      showToast(`Re-downloading ${data.filename || download_id} — no charge`, "success");
+      showToast(t("toast.redownloadOk", { file: data.filename || download_id }), "success");
       setFailedDownloadId(null);
     } catch (e: any) {
-      showToast(`Re-download failed: ${e.message || e}`, "error");
+      showToast(t("toast.downloadFail", { err: e.message || String(e) }), "error");
     }
   };
 
@@ -814,65 +818,73 @@ export default function MapSelector() {
         <div className="flex items-center gap-3">
           <span className="text-2xl">🇹🇭</span>
           <div>
-            <h1 className="font-bold text-slate-900 leading-tight">Thai GeoData Hub</h1>
-            <p className="text-xs text-slate-500 leading-tight">Free OSM downloads · Pay only for large extracts</p>
+            <h1 className="text-slate-900 leading-tight font-medium">{t("app.title")}</h1>
+            <p className="text-xs text-slate-500 leading-tight font-light">{t("app.tagline")}</p>
           </div>
         </div>
         <div className="flex items-center gap-2 text-sm">
           {apiOk === false && (
-            <span className="px-2 py-1 rounded-md bg-red-50 text-red-700 text-xs font-medium border border-red-200">
-              Backend unreachable
+            <span className="px-2 py-1 rounded-md bg-red-50 text-red-700 text-xs border border-red-200">
+              {t("app.offline")}
             </span>
           )}
           {apiOk === true && (
-            <span className="px-2 py-1 rounded-md bg-emerald-50 text-emerald-700 text-xs font-medium border border-emerald-200">
-              ● Online
+            <span className="px-2 py-1 rounded-md bg-emerald-50 text-emerald-700 text-xs border border-emerald-200">
+              {t("app.online")}
             </span>
           )}
 
           {/* Donate button */}
           <button
             onClick={() => setShowCredits(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-pink-50 hover:bg-pink-100 border border-pink-200 text-pink-900 font-medium text-xs transition"
-            title="Support the project"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-pink-50 hover:bg-pink-100 border border-pink-200 text-pink-900 text-xs transition"
+            title={t("donate.title")}
           >
-            <span>💝</span>
-            <span>Donate</span>
+            {t("btn.donate")}
           </button>
 
           {/* History button */}
           <button
             onClick={openHistory}
-            className="px-3 py-1.5 rounded-md hover:bg-slate-100 text-slate-700 font-medium text-xs"
-            title="Download history"
+            className="px-3 py-1.5 rounded-md hover:bg-slate-100 text-slate-700 text-xs"
+            title={t("history.title")}
           >
-            📥 History
+            {t("btn.history")}
           </button>
 
           {/* Attributions */}
           <a
             href="/attributions"
-            className="px-3 py-1.5 rounded-md hover:bg-slate-100 text-slate-700 font-medium text-xs"
+            className="px-3 py-1.5 rounded-md hover:bg-slate-100 text-slate-700 text-xs"
             title="Data sources & licenses"
           >
-            © Sources
+            {t("btn.sources")}
           </a>
+
+          {/* Language toggle */}
+          <button
+            onClick={toggleLang}
+            className="px-2.5 py-1.5 rounded-md hover:bg-slate-100 text-slate-700 text-xs border border-slate-200"
+            title={lang === "en" ? "เปลี่ยนเป็นภาษาไทย" : "Switch to English"}
+          >
+            {t("btn.lang")}
+          </button>
 
           {/* Sign in / out */}
           {userId ? (
             <button
               onClick={handleLogout}
               className="px-3 py-1.5 rounded-md hover:bg-slate-100 text-slate-600 text-xs"
-              title={`Signed in as ${userId}`}
+              title={t("toast.signedIn", { email: userId })}
             >
-              {userId.split("@")[0]} · Sign out
+              {userId.split("@")[0]} · {t("btn.signout")}
             </button>
           ) : (
             <button
               onClick={() => setShowLogin(true)}
-              className="px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-700 text-white font-medium text-xs"
+              className="px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-xs"
             >
-              Sign in
+              {t("btn.signin")}
             </button>
           )}
         </div>
@@ -884,13 +896,13 @@ export default function MapSelector() {
         className="bg-white border-r border-slate-200 flex flex-col"
       >
         {/* STEP 1 */}
-        <Section step={1} title="Find your area" done={!!aoi}>
+        <Section step={1} title={t("step1.title")} done={!!aoi}>
           <div className="relative">
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search Bangkok, Phuket, Chiang Mai…"
+              placeholder={t("step1.placeholder")}
               className="w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
             {searchResults.length > 0 && (
@@ -922,7 +934,7 @@ export default function MapSelector() {
         </Section>
 
         {/* STEP 2 */}
-        <Section step={2} title="Define area of interest" done={!!aoi} disabled={!mapReady}>
+        <Section step={2} title={t("step2.title")} done={!!aoi} disabled={!mapReady}>
           {!aoi ? (
             <div className="space-y-2">
               {!isDrawing ? (
@@ -930,15 +942,15 @@ export default function MapSelector() {
                   <button
                     onClick={startDraw}
                     disabled={!mapReady}
-                    className="w-full py-2 px-3 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white rounded-md font-medium text-sm flex items-center justify-center gap-2"
+                    className="w-full py-2 px-3 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white rounded-md text-sm flex items-center justify-center gap-2"
                   >
-                    ✏️ Draw on map
+                    {t("step2.draw")}
                   </button>
                   <button
                     onClick={() => fileInputRef.current?.click()}
-                    className="w-full py-2 px-3 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-md font-medium text-sm flex items-center justify-center gap-2"
+                    className="w-full py-2 px-3 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-md text-sm flex items-center justify-center gap-2"
                   >
-                    📁 Upload GeoJSON or KML
+                    {t("step2.upload")}
                   </button>
                   <input
                     ref={fileInputRef}
@@ -950,13 +962,13 @@ export default function MapSelector() {
                 </>
               ) : (
                 <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
-                  <p className="text-xs text-blue-900 font-medium mb-1">Drawing mode</p>
-                  <p className="text-xs text-blue-800 mb-2">Click points on the map. Double-click to finish, or press Esc to cancel.</p>
+                  <p className="text-xs text-blue-900 mb-1">{t("step2.drawing.title")}</p>
+                  <p className="text-xs text-blue-800 mb-2 font-light">{t("step2.drawing.help")}</p>
                   <button
                     onClick={cancelDraw}
-                    className="w-full py-1.5 px-3 bg-white border border-blue-300 hover:bg-blue-50 text-blue-700 rounded-md text-xs font-medium"
+                    className="w-full py-1.5 px-3 bg-white border border-blue-300 hover:bg-blue-50 text-blue-700 rounded-md text-xs"
                   >
-                    Cancel drawing
+                    {t("step2.cancel")}
                   </button>
                 </div>
               )}
@@ -964,14 +976,14 @@ export default function MapSelector() {
           ) : (
             <div className="bg-emerald-50 border border-emerald-200 rounded-md p-3">
               <div className="flex justify-between items-start mb-1">
-                <span className="text-sm font-medium text-emerald-900">✓ Area defined</span>
+                <span className="text-sm text-emerald-900">{t("step2.done")}</span>
               </div>
-              <p className="text-xs text-emerald-800 mb-2">Approx. {aoiAreaKm2.toFixed(1)} km²</p>
+              <p className="text-xs text-emerald-800 mb-2 font-light">{t("step2.approx", { km: aoiAreaKm2.toFixed(1) })}</p>
               <button
                 onClick={clearAoi}
-                className="w-full py-1.5 px-3 bg-white border border-emerald-300 hover:bg-emerald-50 text-emerald-700 rounded-md text-xs font-medium"
+                className="w-full py-1.5 px-3 bg-white border border-emerald-300 hover:bg-emerald-50 text-emerald-700 rounded-md text-xs"
               >
-                Clear & redraw
+                {t("step2.clear")}
               </button>
             </div>
           )}
@@ -980,10 +992,10 @@ export default function MapSelector() {
         {/* STEP 3 */}
         <Section
           step={3}
-          title="Pick data layers"
+          title={t("step3.title")}
           done={selectedLayers.size > 0}
           disabled={!aoi}
-          hint={!aoi ? "Define an area first" : `${selectedLayers.size} selected`}
+          hint={!aoi ? t("step3.needaoi") : t("step3.selected", { n: selectedLayers.size })}
         >
           <div className="space-y-1">
             {/* Hide layers that aren't available — keeps UI clean on free tier */}
@@ -995,11 +1007,12 @@ export default function MapSelector() {
               const isRaster = l.geom_type.toLowerCase() === "raster";
               const noData = l.status === "no_data";
               const disabled = !aoi || noData;
+              const layerName = lang === "th" && l.name_th ? l.name_th : l.name_en;
               const featureLabel = isRaster
-                ? "Raster — population grid"
+                ? t("step3.raster")
                 : noData
-                  ? "Coming soon"
-                  : `${l.feature_count.toLocaleString()} features`;
+                  ? t("step3.soon")
+                  : t("step3.features", { n: l.feature_count.toLocaleString() });
               return (
                 <div
                   key={l.slug}
@@ -1016,11 +1029,11 @@ export default function MapSelector() {
                   <LayerSymbol geomType={l.geom_type} color={color} />
                   <div className="flex-1 min-w-0">
                     <div className="text-sm text-slate-900 leading-tight truncate flex items-center gap-1">
-                      {l.name_en}
-                      {noData && <span className="text-[9px] px-1 rounded bg-amber-100 text-amber-800 font-medium">SOON</span>}
-                      {isRaster && !noData && <span className="text-[9px] px-1 rounded bg-purple-100 text-purple-800 font-medium">RASTER</span>}
+                      {layerName}
+                      {noData && <span className="text-[9px] px-1 rounded bg-amber-100 text-amber-800">SOON</span>}
+                      {isRaster && !noData && <span className="text-[9px] px-1 rounded bg-purple-100 text-purple-800">RASTER</span>}
                     </div>
-                    <div className="text-[11px] text-slate-500 leading-tight">{featureLabel}</div>
+                    <div className="text-[11px] text-slate-500 leading-tight font-light">{featureLabel}</div>
                   </div>
                   <button
                     onClick={() => setLayerInfoSlug(l.slug)}
@@ -1046,10 +1059,10 @@ export default function MapSelector() {
         </Section>
 
         {/* STEP 4 */}
-        <Section step={4} title="Format & download" disabled={!aoi || selectedLayers.size === 0}>
+        <Section step={4} title={t("step4.title")} disabled={!aoi || selectedLayers.size === 0}>
           <div className="space-y-3">
             <div>
-              <p className="text-xs font-medium text-slate-700 mb-1.5">Export formats</p>
+              <p className="text-xs text-slate-700 mb-1.5">{t("step4.formats")}</p>
               <div className="flex gap-1.5">
                 {[
                   { v: "geojson", label: "GeoJSON" },
@@ -1068,12 +1081,7 @@ export default function MapSelector() {
             </div>
 
             <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <p className="text-xs font-medium text-slate-700">Coordinate Reference System</p>
-                <span className="text-[10px] text-slate-500" title="KML always uses WGS 84">
-                  {targetCrs !== "EPSG:4326" && formats.has("kml") ? "KML stays WGS 84" : ""}
-                </span>
-              </div>
+              <p className="text-xs text-slate-700 mb-1.5">{t("step4.crs")}</p>
               <select
                 value={targetCrs}
                 onChange={(e) => {
@@ -1088,34 +1096,38 @@ export default function MapSelector() {
                   </option>
                 ))}
               </select>
-              <p className="text-[10px] text-slate-500 mt-1 leading-tight">
-                Default WGS 84 (lat/lon). Pick UTM for accurate distance/area in meters.
+              <p className="text-[10px] text-slate-500 mt-1 leading-tight font-light">
+                {t("step4.crsHint")}
               </p>
             </div>
 
             <button
               onClick={runPreview}
               disabled={!aoi || selectedLayers.size === 0 || loadingPreview}
-              className="w-full py-2 px-3 text-sm rounded-md font-medium bg-white border border-slate-300 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed text-slate-700 flex items-center justify-center gap-2"
+              className="w-full py-2 px-3 text-sm rounded-md bg-white border border-slate-300 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed text-slate-700 flex items-center justify-center gap-2"
             >
-              {loadingPreview ? <><Spinner /> Counting…</> : "Preview feature count"}
+              {loadingPreview ? <><Spinner /> {t("step4.previewing")}</> : t("step4.preview")}
             </button>
 
             {preview && (
               <div className="bg-slate-50 border border-slate-200 rounded-md p-2.5">
                 <div className="flex justify-between items-baseline mb-1.5">
-                  <span className="text-xs font-medium text-slate-700">
-                    Total: {totalPreviewFeatures.toLocaleString()}
+                  <span className="text-xs text-slate-700">
+                    {t("step4.total", { n: totalPreviewFeatures.toLocaleString() })}
                   </span>
-                  <span className="text-xs font-bold text-emerald-700">FREE</span>
+                  <span className="text-xs font-medium text-emerald-700">{t("step4.free")}</span>
                 </div>
-                <div className="space-y-0.5 text-xs text-slate-600">
-                  {Object.entries(preview).map(([slug, p]) => (
-                    <div key={slug} className="flex justify-between">
-                      <span>{LAYERS.find((l) => l.slug === slug)?.name_en || slug}</span>
-                      <span className="font-mono">{p.error ? <span className="text-red-600">err</span> : p.feature_count.toLocaleString()}</span>
-                    </div>
-                  ))}
+                <div className="space-y-0.5 text-xs text-slate-600 font-light">
+                  {Object.entries(preview).map(([slug, p]) => {
+                    const layer = LAYERS.find((l) => l.slug === slug);
+                    const name = layer ? (lang === "th" && layer.name_th ? layer.name_th : layer.name_en) : slug;
+                    return (
+                      <div key={slug} className="flex justify-between">
+                        <span>{name}</span>
+                        <span className="font-mono">{p.error ? <span className="text-red-600">err</span> : p.feature_count.toLocaleString()}</span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -1123,12 +1135,12 @@ export default function MapSelector() {
             {/* Failed-download retry banner */}
             {failedDownloadId && !loadingDownload && (
               <div className="bg-red-50 border border-red-200 rounded-md p-2.5 flex items-center justify-between gap-2">
-                <span className="text-xs text-red-800">Last download failed</span>
+                <span className="text-xs text-red-800">{t("step4.retry")}</span>
                 <button
                   onClick={() => reDownload(failedDownloadId)}
-                  className="px-2 py-1 text-xs rounded bg-white border border-red-300 hover:bg-red-50 text-red-700 font-medium"
+                  className="px-2 py-1 text-xs rounded bg-white border border-red-300 hover:bg-red-50 text-red-700"
                 >
-                  Retry (free)
+                  {t("step4.retryBtn")}
                 </button>
               </div>
             )}
@@ -1136,12 +1148,12 @@ export default function MapSelector() {
             <button
               onClick={() => runDownload()}
               disabled={!canDownload}
-              className="w-full py-3 px-3 text-sm rounded-md font-bold bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white shadow-sm flex items-center justify-center gap-2"
+              className="w-full py-3 px-3 text-sm rounded-md font-medium bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white shadow-sm flex items-center justify-center gap-2"
             >
-              {loadingDownload ? <><Spinner light /> Preparing ZIP…</> : "⬇ Download ZIP"}
+              {loadingDownload ? <><Spinner light /> {t("step4.downloading")}</> : t("step4.download")}
             </button>
-            <p className="text-[11px] text-slate-500 text-center">
-              100% free · Donations welcome 💝 · No login required
+            <p className="text-[11px] text-slate-500 text-center font-light">
+              {t("step4.footer")}
             </p>
           </div>
         </Section>
@@ -1158,7 +1170,7 @@ export default function MapSelector() {
           <div className="absolute inset-0 flex items-center justify-center bg-slate-100/80 backdrop-blur-sm z-10">
             <div className="text-center">
               <div className="text-4xl animate-pulse">🌏</div>
-              <p className="text-sm text-slate-600 mt-2">Loading map…</p>
+              <p className="text-sm text-slate-600 mt-2 font-light">{t("tip.loading")}</p>
             </div>
           </div>
         )}
@@ -1167,8 +1179,8 @@ export default function MapSelector() {
           <div className="absolute inset-0 flex items-center justify-center bg-white/95 z-10 p-6">
             <div className="max-w-lg bg-red-50 border border-red-200 rounded-xl p-6 shadow-lg">
               <div className="text-3xl mb-2">⚠️</div>
-              <h3 className="font-bold text-red-900 mb-2">Map failed to load</h3>
-              <p className="text-sm text-red-800 mb-4 break-words">{mapError}</p>
+              <h3 className="text-red-900 mb-2 font-medium">{t("tip.maperror")}</h3>
+              <p className="text-sm text-red-800 mb-4 break-words font-light">{mapError}</p>
             </div>
           </div>
         )}
@@ -1183,15 +1195,15 @@ export default function MapSelector() {
 
         {/* Floating tip */}
         {mapReady && !aoi && !isDrawing && (
-          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-white rounded-full shadow-lg border border-slate-200 px-4 py-2 text-sm text-slate-700 flex items-center gap-2">
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-white rounded-full shadow-lg border border-slate-200 px-4 py-2 text-sm text-slate-700 flex items-center gap-2 font-light">
             <span className="text-blue-600">▸</span>
-            Click <span className="font-medium">"Draw on map"</span> to define your area
+            {t("tip.draw")}
           </div>
         )}
         {isDrawing && (
-          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-blue-600 rounded-full shadow-lg px-4 py-2 text-sm text-white flex items-center gap-2 font-medium">
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-blue-600 rounded-full shadow-lg px-4 py-2 text-sm text-white flex items-center gap-2">
             <span className="animate-pulse">●</span>
-            Click points · Double-click to finish · Esc to cancel
+            {t("tip.drawing")}
           </div>
         )}
       </main>
@@ -1310,14 +1322,15 @@ function LayerSymbol({ geomType, color }: { geomType: string; color: string }) {
 
 // ── Email login modal (soft auth)
 function EmailLoginModal({ onClose, onSubmit }: { onClose: () => void; onSubmit: (e: string) => void }) {
+  const { t } = useT();
   const [email, setEmail] = useState("");
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
       <div className="bg-white rounded-xl shadow-2xl max-w-sm w-full p-6" onClick={(e) => e.stopPropagation()}>
         <div className="text-3xl mb-2">✉️</div>
-        <h2 className="text-lg font-bold text-slate-900 mb-1">Sign in with email</h2>
-        <p className="text-sm text-slate-600 mb-4">
-          We use your email to remember your credits and download history. No password needed.
+        <h2 className="text-lg text-slate-900 mb-1 font-medium">{t("login.title")}</h2>
+        <p className="text-sm text-slate-600 mb-4 font-light">
+          {t("login.subtitle")}
         </p>
         <input
           type="email"
@@ -1325,7 +1338,7 @@ function EmailLoginModal({ onClose, onSubmit }: { onClose: () => void; onSubmit:
           onChange={(e) => setEmail(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && onSubmit(email)}
           autoFocus
-          placeholder="you@example.com"
+          placeholder={t("login.placeholder")}
           className="w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
         <div className="flex gap-2 mt-4">
@@ -1333,18 +1346,18 @@ function EmailLoginModal({ onClose, onSubmit }: { onClose: () => void; onSubmit:
             onClick={onClose}
             className="flex-1 py-2 rounded-md border border-slate-300 hover:bg-slate-50 text-sm text-slate-700"
           >
-            Cancel
+            {t("login.cancel")}
           </button>
           <button
             onClick={() => onSubmit(email)}
             disabled={!isValidEmail(email)}
-            className="flex-1 py-2 rounded-md bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-sm text-white font-medium"
+            className="flex-1 py-2 rounded-md bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-sm text-white"
           >
-            Continue
+            {t("login.continue")}
           </button>
         </div>
-        <p className="mt-3 text-[11px] text-slate-500">
-          We never email marketing. Your email is used as your account ID only.
+        <p className="mt-3 text-[11px] text-slate-500 font-light">
+          {t("login.privacy")}
         </p>
       </div>
     </div>
@@ -1353,14 +1366,15 @@ function EmailLoginModal({ onClose, onSubmit }: { onClose: () => void; onSubmit:
 
 // ── Credits / buy-pack modal
 function DonateModal({ onClose }: { onClose: () => void }) {
+  const { t } = useT();
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
       <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
         <div className="flex justify-between items-start mb-3">
           <div>
-            <h2 className="text-xl font-bold text-slate-900">Support this project 💝</h2>
-            <p className="text-sm text-slate-600 mt-0.5">
-              All downloads are <strong>free</strong>. If this tool saved you time, a small donation keeps the servers running.
+            <h2 className="text-xl text-slate-900 font-medium">{t("donate.title")}</h2>
+            <p className="text-sm text-slate-600 mt-0.5 font-light">
+              {t("donate.subtitle")}
             </p>
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-700 text-xl leading-none">×</button>
@@ -1371,22 +1385,21 @@ function DonateModal({ onClose }: { onClose: () => void }) {
             href="https://www.buymeacoffee.com/kampanart"
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center justify-center gap-2 w-full py-3 px-4 bg-yellow-400 hover:bg-yellow-500 text-slate-900 font-bold rounded-lg transition"
+            className="flex items-center justify-center gap-2 w-full py-3 px-4 bg-yellow-400 hover:bg-yellow-500 text-slate-900 font-medium rounded-lg transition"
           >
-            ☕ Buy Me a Coffee
+            {t("donate.bmac")}
           </a>
 
           <div className="border border-slate-200 rounded-lg p-3 bg-slate-50">
-            <p className="text-xs font-medium text-slate-700 mb-2">🇹🇭 PromptPay (Thai donors)</p>
+            <p className="text-xs text-slate-700 mb-2">{t("donate.promptpay")}</p>
             <p className="text-sm text-slate-900 font-mono">kamp.guitar@gmail.com</p>
-            <p className="text-[11px] text-slate-500 mt-1">
-              Open your bank app → PromptPay → enter the email above as recipient.
+            <p className="text-[11px] text-slate-500 mt-1 font-light">
+              {t("donate.promptpayHint")}
             </p>
           </div>
 
-          <div className="text-center text-xs text-slate-500 pt-2 border-t border-slate-100">
-            <p>Any amount welcome 🙏</p>
-            <p className="mt-1">Made with ❤️ in Thailand for the GIS community.</p>
+          <div className="text-center text-xs text-slate-500 pt-2 border-t border-slate-100 font-light">
+            <p>{t("donate.footer")}</p>
           </div>
         </div>
       </div>
@@ -1403,36 +1416,37 @@ function HistoryDrawer({
   loading: boolean;
   onRedownload: (id: string) => void;
 }) {
+  const { t } = useT();
   return (
     <>
       <div className="fixed inset-0 bg-black/30 z-40" onClick={onClose} />
       <div className="fixed top-0 right-0 bottom-0 w-full max-w-md bg-white shadow-2xl z-50 flex flex-col">
         <div className="p-4 border-b border-slate-200 flex justify-between items-center">
           <div>
-            <h2 className="font-bold text-slate-900">Download history</h2>
-            <p className="text-xs text-slate-500">Re-download anytime — no charge</p>
+            <h2 className="text-slate-900 font-medium">{t("history.title")}</h2>
+            <p className="text-xs text-slate-500 font-light">{t("history.subtitle")}</p>
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-700 text-xl leading-none">×</button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-3">
           {loading && (
-            <div className="text-center text-sm text-slate-500 py-8">Loading…</div>
+            <div className="text-center text-sm text-slate-500 py-8 font-light">{t("history.loading")}</div>
           )}
           {!loading && history && history.length === 0 && (
-            <div className="text-center text-sm text-slate-500 py-12">
+            <div className="text-center text-sm text-slate-500 py-12 font-light">
               <div className="text-3xl mb-2">📭</div>
-              No downloads yet. Your purchases will appear here.
+              {t("history.empty")}
             </div>
           )}
           {!loading && history && history.map((rec) => (
             <div key={rec.download_id} className="bg-slate-50 border border-slate-200 rounded-lg p-3 mb-2">
               <div className="flex justify-between items-start gap-2 mb-1">
-                <span className="font-medium text-sm text-slate-900 truncate">{rec.filename}</span>
-                <span className="text-[11px] text-slate-500 whitespace-nowrap">{formatDate(rec.created_at)}</span>
+                <span className="text-sm text-slate-900 truncate">{rec.filename}</span>
+                <span className="text-[11px] text-slate-500 whitespace-nowrap font-light">{formatDate(rec.created_at)}</span>
               </div>
-              <div className="text-xs text-slate-600 mb-2">
-                {rec.layers.length} layers · {rec.total_features.toLocaleString()} features · {rec.size_mb.toFixed(1)} MB · {rec.credits_used} credits
+              <div className="text-xs text-slate-600 mb-2 font-light">
+                {rec.layers.length} layers · {rec.total_features.toLocaleString()} features · {rec.size_mb.toFixed(1)} MB
               </div>
               <div className="flex flex-wrap gap-1 mb-2">
                 {rec.layers.slice(0, 4).map((l) => (
@@ -1443,9 +1457,9 @@ function HistoryDrawer({
               <button
                 onClick={() => onRedownload(rec.download_id)}
                 disabled={!rec.s3_key}
-                className="w-full py-1.5 text-xs rounded bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-medium"
+                className="w-full py-1.5 text-xs rounded bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white"
               >
-                {rec.s3_key ? "⬇ Download again (free)" : "Expired — re-download unavailable"}
+                {rec.s3_key ? t("history.again") : t("history.expired")}
               </button>
             </div>
           ))}
@@ -1457,35 +1471,37 @@ function HistoryDrawer({
 
 // ── First-visit walkthrough
 function IntroModal({ onClose }: { onClose: () => void }) {
+  const { t } = useT();
+  const steps = [
+    { n: 1, t: t("intro.s1.t"), d: t("intro.s1.d") },
+    { n: 2, t: t("intro.s2.t"), d: t("intro.s2.d") },
+    { n: 3, t: t("intro.s3.t"), d: t("intro.s3.d") },
+    { n: 4, t: t("intro.s4.t"), d: t("intro.s4.d") },
+  ];
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
       <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full p-6" onClick={(e) => e.stopPropagation()}>
         <div className="text-4xl mb-3">🇹🇭</div>
-        <h2 className="text-xl font-bold text-slate-900 mb-1">Welcome to Thai GeoData Hub</h2>
-        <p className="text-sm text-slate-600 mb-5">
-          Download free OpenStreetMap data for any area in Thailand in 4 simple steps:
+        <h2 className="text-xl text-slate-900 mb-1 font-medium">{t("intro.title")}</h2>
+        <p className="text-sm text-slate-600 mb-5 font-light">
+          {t("intro.subtitle")}
         </p>
         <div className="space-y-3 mb-5">
-          {[
-            { n: 1, t: "Find your area", d: "Search a city or jump to Bangkok / Chiang Mai / Phuket / Pattaya." },
-            { n: 2, t: "Define your AOI", d: "Draw a polygon on the map, or upload a GeoJSON / KML." },
-            { n: 3, t: "Pick layers", d: "Roads, buildings, waterways, POIs, admin boundaries — 12 layers in total." },
-            { n: 4, t: "Download ZIP", d: "100% free — SHP, GeoJSON, KML included with proper attribution files. Donations welcome 💝" },
-          ].map((s) => (
+          {steps.map((s) => (
             <div key={s.n} className="flex gap-3">
-              <span className="flex-shrink-0 w-7 h-7 rounded-full bg-blue-600 text-white text-sm font-bold flex items-center justify-center">{s.n}</span>
+              <span className="flex-shrink-0 w-7 h-7 rounded-full bg-blue-600 text-white text-sm font-medium flex items-center justify-center">{s.n}</span>
               <div>
-                <div className="font-semibold text-sm text-slate-900">{s.t}</div>
-                <div className="text-xs text-slate-600">{s.d}</div>
+                <div className="font-medium text-sm text-slate-900">{s.t}</div>
+                <div className="text-xs text-slate-600 font-light">{s.d}</div>
               </div>
             </div>
           ))}
         </div>
         <button
           onClick={onClose}
-          className="w-full py-2.5 rounded-md bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm"
+          className="w-full py-2.5 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-sm"
         >
-          Got it — let's go
+          {t("intro.cta")}
         </button>
       </div>
     </div>
@@ -1515,6 +1531,7 @@ interface LayerDetails {
 }
 
 function LayerDetailsModal({ slug, apiBase, onClose }: { slug: string; apiBase: string; onClose: () => void }) {
+  const { t, lang } = useT();
   const [details, setDetails] = useState<LayerDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -1541,45 +1558,45 @@ function LayerDetailsModal({ slug, apiBase, onClose }: { slug: string; apiBase: 
       <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[85vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
         <div className="flex justify-between items-center p-5 border-b border-slate-200">
           <div>
-            <h2 className="text-lg font-bold text-slate-900">{details?.name_en || slug}</h2>
-            <p className="text-xs text-slate-500">{details?.name_th}</p>
+            <h2 className="text-lg text-slate-900 font-medium">{lang === "th" && details?.name_th ? details.name_th : (details?.name_en || slug)}</h2>
+            <p className="text-xs text-slate-500 font-light">{lang === "th" ? details?.name_en : details?.name_th}</p>
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-700 text-2xl leading-none">×</button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-5 text-sm">
-          {loading && <div className="text-center text-slate-500 py-8">Loading layer details…</div>}
-          {err && <div className="text-red-700 bg-red-50 border border-red-200 rounded p-3 text-xs">Failed to load: {err}</div>}
+          {loading && <div className="text-center text-slate-500 py-8 font-light">{t("details.loading")}</div>}
+          {err && <div className="text-red-700 bg-red-50 border border-red-200 rounded p-3 text-xs">{err}</div>}
           {details && (
             <div className="space-y-4">
               {details.description && (
-                <p className="text-slate-700">{details.description}</p>
+                <p className="text-slate-700 font-light">{details.description}</p>
               )}
 
               {/* Quick facts grid */}
               <div className="grid grid-cols-2 gap-2 text-xs">
-                <Fact label="Geometry"      value={details.geom_type} />
-                <Fact label="Feature count" value={details.feature_count.toLocaleString()} />
-                <Fact label="Native CRS"    value={details.crs_native} />
-                <Fact label="Last updated"  value={details.last_refreshed ? new Date(details.last_refreshed).toLocaleDateString() : "—"} />
+                <Fact label={t("details.geometry")}     value={details.geom_type} />
+                <Fact label={t("details.featureCount")} value={details.feature_count.toLocaleString()} />
+                <Fact label={t("details.crs")}          value={details.crs_native} />
+                <Fact label={t("details.updated")}      value={details.last_refreshed ? new Date(details.last_refreshed).toLocaleDateString() : "—"} />
               </div>
 
               {/* Source / license */}
               <div className="bg-slate-50 border border-slate-200 rounded-md p-3 text-xs space-y-1.5">
                 <div className="flex justify-between gap-2">
-                  <span className="text-slate-500">Source:</span>
+                  <span className="text-slate-500">{t("details.source")}</span>
                   <a href={details.source_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-right">
                     {details.source} ↗
                   </a>
                 </div>
                 <div className="flex justify-between gap-2">
-                  <span className="text-slate-500">License:</span>
+                  <span className="text-slate-500">{t("details.license")}</span>
                   <a href={details.license_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-right">
                     {details.license} ↗
                   </a>
                 </div>
                 <div className="flex justify-between gap-2">
-                  <span className="text-slate-500">Required attribution:</span>
+                  <span className="text-slate-500">{t("details.attribution")}</span>
                   <code className="text-slate-900 text-[11px] text-right">{details.attribution}</code>
                 </div>
               </div>
@@ -1587,7 +1604,7 @@ function LayerDetailsModal({ slug, apiBase, onClose }: { slug: string; apiBase: 
               {/* Available CRS output formats */}
               {details.crs_available?.length > 0 && (
                 <div>
-                  <p className="text-xs font-medium text-slate-700 mb-1.5">Available output CRS</p>
+                  <p className="text-xs text-slate-700 mb-1.5">{t("details.crsAvailable")}</p>
                   <div className="flex flex-wrap gap-1.5">
                     {details.crs_available.map((c) => (
                       <span key={c} className="text-[10px] px-2 py-1 rounded bg-blue-50 text-blue-800 border border-blue-200">{c}</span>
@@ -1599,14 +1616,14 @@ function LayerDetailsModal({ slug, apiBase, onClose }: { slug: string; apiBase: 
               {/* Attribute schema */}
               {details.schema?.length > 0 && (
                 <div>
-                  <p className="text-xs font-medium text-slate-700 mb-1.5">Attribute schema ({details.schema.length} fields)</p>
+                  <p className="text-xs text-slate-700 mb-1.5">{t("details.schema", { n: details.schema.length })}</p>
                   <div className="border border-slate-200 rounded-md overflow-hidden">
                     <table className="w-full text-xs">
                       <thead className="bg-slate-100">
                         <tr>
-                          <th className="text-left px-2 py-1 font-medium text-slate-700">Field</th>
-                          <th className="text-left px-2 py-1 font-medium text-slate-700">Type</th>
-                          <th className="text-left px-2 py-1 font-medium text-slate-700">Sample</th>
+                          <th className="text-left px-2 py-1 text-slate-700">{t("details.schemaField")}</th>
+                          <th className="text-left px-2 py-1 text-slate-700">{t("details.schemaType")}</th>
+                          <th className="text-left px-2 py-1 text-slate-700">{t("details.schemaSample")}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1633,7 +1650,7 @@ function LayerDetailsModal({ slug, apiBase, onClose }: { slug: string; apiBase: 
               {/* Bbox */}
               {details.bbox && details.bbox.length === 4 && (
                 <div>
-                  <p className="text-xs font-medium text-slate-700 mb-1.5">Coverage bbox (W, S, E, N)</p>
+                  <p className="text-xs text-slate-700 mb-1.5">{t("details.bbox")}</p>
                   <code className="text-[11px] bg-slate-100 px-2 py-1 rounded block">
                     [{details.bbox.map((n) => n.toFixed(3)).join(", ")}]
                   </code>
@@ -1658,6 +1675,13 @@ function Fact({ label, value }: { label: string; value: string }) {
 
 // ── Full-screen download progress overlay
 function DownloadProgressOverlay() {
+  const { t, lang } = useT();
+  const subtitle = lang === "th"
+    ? "กำลังตัดชั้นข้อมูลและรวมไฟล์ ใช้เวลา 5–30 วินาทีสำหรับพื้นที่ใหญ่"
+    : "Clipping layers and bundling files. This can take 5–30 seconds for large areas.";
+  const note = lang === "th"
+    ? "ถ้าเบราว์เซอร์บล็อกการดาวน์โหลด ลองกดปุ่ม Retry ใต้รายการ — ไฟล์ถูกบันทึกแล้ว ดาวน์โหลดซ้ำได้ฟรี"
+    : "If your browser blocks the download, check the retry banner — your file is saved and re-downloadable for free.";
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
       <div className="bg-white rounded-xl shadow-2xl max-w-sm w-full p-8 text-center">
@@ -1667,9 +1691,9 @@ function DownloadProgressOverlay() {
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
           </svg>
         </div>
-        <h3 className="font-bold text-slate-900 mb-1">Preparing your ZIP…</h3>
-        <p className="text-sm text-slate-600">Clipping layers and bundling files. This can take 5–30 seconds for large areas.</p>
-        <p className="text-xs text-slate-400 mt-3">If your browser blocks the download, check the failed-download retry banner — your file is saved and re-downloadable for free.</p>
+        <h3 className="text-slate-900 mb-1 font-medium">{t("step4.downloading")}</h3>
+        <p className="text-sm text-slate-600 font-light">{subtitle}</p>
+        <p className="text-xs text-slate-400 mt-3 font-light">{note}</p>
       </div>
     </div>
   );

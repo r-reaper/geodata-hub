@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { useT } from "../../lib/i18n";
 
 const SOURCES = [
   {
@@ -43,21 +44,34 @@ const SOURCES = [
 
 export default function AttributionsPage() {
   const router = useRouter();
+  const { t, lang, toggle } = useT();
+  const back = lang === "th" ? "← กลับไปที่แผนที่" : "← Back to map";
+  const title = lang === "th" ? "แหล่งข้อมูลและการระบุที่มา" : "Data sources & attributions";
+  const intro = lang === "th"
+    ? "ข้อมูลทั้งหมดบน Thai GeoData Hub มาจากแหล่งข้อมูลเปิดเหล่านี้ ทุกครั้งที่ดาวน์โหลด ไฟล์ระบุที่มาและสัญญาอนุญาตที่เกี่ยวข้องจะแนบมาใน ZIP — กรุณาปฏิบัติตามเงื่อนไขเมื่อใช้งานหรือเผยแพร่ซ้ำ"
+    : "All data on Thai GeoData Hub comes from these open sources. When you download data, the corresponding attribution and license files are bundled inside the ZIP — please follow the terms when using or redistributing.";
+
   return (
-    <div className="min-h-screen bg-slate-50 py-8 px-4">
+    <div className="min-h-screen bg-slate-50 py-8 px-4 font-sans">
       <div className="max-w-4xl mx-auto">
-        <button
-          onClick={() => router.push("/")}
-          className="text-sm text-slate-600 hover:text-slate-900 font-medium mb-6 inline-flex items-center gap-1"
-        >
-          ← Back to map
-        </button>
+        <div className="flex justify-between items-center mb-6">
+          <button
+            onClick={() => router.push("/")}
+            className="text-sm text-slate-600 hover:text-slate-900 font-light inline-flex items-center gap-1"
+          >
+            {back}
+          </button>
+          <button
+            onClick={toggle}
+            className="px-2.5 py-1.5 rounded-md hover:bg-slate-100 text-slate-700 text-xs border border-slate-200"
+          >
+            {t("btn.lang")}
+          </button>
+        </div>
 
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-slate-900">Data sources & attributions</h1>
-          <p className="text-slate-600 mt-2">
-            All data on Thai GeoData Hub comes from these open sources. When you download data, the corresponding attribution and license files are bundled inside the ZIP — please follow the terms when using or redistributing.
-          </p>
+          <h1 className="text-3xl text-slate-900 font-medium">{title}</h1>
+          <p className="text-slate-600 mt-2 font-light">{intro}</p>
         </div>
 
         <div className="space-y-5">
