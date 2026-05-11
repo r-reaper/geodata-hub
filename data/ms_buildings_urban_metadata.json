@@ -1,0 +1,95 @@
+{
+  "slug": "ms_buildings_urban",
+  "name_en": "Buildings (Microsoft, urban)",
+  "name_th": "อาคาร (Microsoft, เมืองหลัก)",
+  "geom_type": "Polygon",
+  "feature_count": 2729682,
+  "source": "Microsoft Global Building Footprints (urban subset)",
+  "license": "ODbL v1.0",
+  "license_url": "https://opendatacommons.org/licenses/odbl/1-0/",
+  "attribution": "Building footprints © Microsoft",
+  "coverage_bboxes": [
+    {
+      "name_en": "Bangkok metro",
+      "name_th": "กรุงเทพมหานครและปริมณฑล",
+      "bbox": [
+        100.3,
+        13.5,
+        100.95,
+        14.05
+      ]
+    },
+    {
+      "name_en": "Chiang Mai",
+      "name_th": "เชียงใหม่",
+      "bbox": [
+        98.85,
+        18.6,
+        99.15,
+        18.95
+      ]
+    },
+    {
+      "name_en": "Chiang Rai",
+      "name_th": "เชียงราย",
+      "bbox": [
+        99.75,
+        19.85,
+        100.0,
+        20.05
+      ]
+    },
+    {
+      "name_en": "Phuket",
+      "name_th": "ภูเก็ต",
+      "bbox": [
+        98.25,
+        7.7,
+        98.5,
+        8.2
+      ]
+    },
+    {
+      "name_en": "Pattaya",
+      "name_th": "พัทยา (ชลบุรี)",
+      "bbox": [
+        100.85,
+        12.85,
+        101.05,
+        13.05
+      ]
+    },
+    {
+      "name_en": "Hat Yai",
+      "name_th": "หาดใหญ่",
+      "bbox": [
+        100.4,
+        6.8,
+        100.55,
+        7.05
+      ]
+    },
+    {
+      "name_en": "Khon Kaen",
+      "name_th": "ขอนแก่น",
+      "bbox": [
+        102.7,
+        16.35,
+        102.95,
+        16.55
+      ]
+    },
+    {
+      "name_en": "Korat",
+      "name_th": "นครราชสีมา",
+      "bbox": [
+        101.95,
+        14.85,
+        102.2,
+        15.1
+      ]
+    }
+  ],
+  "last_refreshed": "2026-05-11T14:09:42.630933Z",
+  "size_mb": 541.76
+}

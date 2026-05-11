@@ -1,0 +1,30 @@
+{
+  "slug": "srtm",
+  "name_en": "Elevation (SRTM 30m)",
+  "name_th": "ความสูง (SRTM 30 ม.)",
+  "geom_type": "Raster",
+  "data_type": "raster",
+  "resolution_m": 30,
+  "feature_count": 0,
+  "bbox": [
+    97.3,
+    5.6,
+    105.7,
+    20.5
+  ],
+  "raster_size": [
+    30240,
+    53640
+  ],
+  "elevation_min_m": -96.0,
+  "elevation_max_m": 2823.0,
+  "elevation_mean_m": 242.6,
+  "size_mb": 979.45,
+  "source": "NASA SRTM 1 arc-second Global",
+  "source_url": "https://www.earthdata.nasa.gov/sensors/srtm",
+  "license": "Public domain (U.S. Government work)",
+  "license_url": "https://www.usa.gov/government-works",
+  "attribution": "Elevation data: NASA SRTM",
+  "last_refreshed": "2026-05-11T14:06:46.380710Z",
+  "filename": "srtm.tif"
+}

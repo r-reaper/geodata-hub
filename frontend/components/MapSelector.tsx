@@ -73,7 +73,8 @@ const LAYERS: LayerInfo[] = [
   { slug: "waterways",        name_en: "Waterways",            name_th: "แหล่งน้ำ",         geom_type: "Linestring", feature_count: 0 },
   { slug: "railways",         name_en: "Railways",             name_th: "ทางรถไฟ",          geom_type: "Linestring", feature_count: 0 },
   { slug: "buildings",        name_en: "Buildings (OSM)",      name_th: "อาคาร (OSM)",      geom_type: "Polygon",    feature_count: 0 },
-  { slug: "ms_buildings",     name_en: "Buildings (Microsoft)", name_th: "อาคาร (Microsoft)", geom_type: "Polygon",  feature_count: 0 },
+  { slug: "ms_buildings",       name_en: "Buildings (Microsoft)",        name_th: "อาคาร (Microsoft)",        geom_type: "Polygon", feature_count: 0 },
+  { slug: "ms_buildings_urban", name_en: "Buildings (Microsoft, urban)", name_th: "อาคาร (Microsoft, เมืองหลัก)", geom_type: "Polygon", feature_count: 0 },
   { slug: "google_buildings", name_en: "Buildings (Google)",   name_th: "อาคาร (Google)",   geom_type: "Polygon",    feature_count: 0 },
   { slug: "landuse",          name_en: "Land Use",             name_th: "การใช้ที่ดิน",     geom_type: "Polygon",    feature_count: 0 },
   { slug: "natural",          name_en: "Natural",              name_th: "ธรรมชาติ",         geom_type: "Polygon",    feature_count: 0 },
@@ -89,7 +90,7 @@ const LAYER_COLORS: Record<string, string> = {
   roads:            "#EF4444", waterways: "#0EA5E9", railways:  "#7C3AED",
   buildings:        "#F97316", landuse:   "#22C55E", natural:   "#14B8A6",
   parks:            "#16A34A", temples:   "#EAB308", pois:      "#EC4899",
-  ms_buildings:     "#FB923C",                       google_buildings: "#FACC15",
+  ms_buildings:     "#FB923C", ms_buildings_urban: "#EA580C", google_buildings: "#FACC15",
   worldpop:         "#DC2626",                       srtm:             "#78350F",
 };
 

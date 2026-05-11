@@ -756,20 +756,21 @@ def _sync_data_from_r2():
     # OSM. Enable them by upgrading Railway tier and adding to this list,
     # OR cropping them to major urban areas before re-uploading.
     vector_layers = [
-        "province",   # ~152 MB
-        "amphoe",     # ~350 MB
-        "tambon",     #  ~22 MB
-        "roads",      # ~332 MB
-        "waterways",  # ~289 MB
-        "railways",   #   ~8 MB
-        "buildings",  #  ~70 MB — OSM buildings (small subset)
-        "landuse",    # ~237 MB
-        "natural",    # ~488 MB
-        "parks",      #  ~25 MB
-        "temples",    #   ~8 MB
-        "pois",       #  ~26 MB
+        "province",            # ~152 MB
+        "amphoe",              # ~350 MB
+        "tambon",              #  ~22 MB
+        "roads",               # ~332 MB
+        "waterways",           # ~289 MB
+        "railways",            #   ~8 MB
+        "buildings",           #  ~70 MB — OSM buildings (small subset)
+        "landuse",             # ~237 MB
+        "natural",             # ~488 MB
+        "parks",               #  ~25 MB
+        "temples",             #   ~8 MB
+        "pois",                #  ~26 MB
+        "ms_buildings_urban",  # ~542 MB — MS buildings cropped to 8 cities (2.7M)
     ]
-    skipped_layers = ["ms_buildings", "google_buildings"]  # too big for 5 GB
+    skipped_layers = ["ms_buildings", "google_buildings"]  # too big for 5 GB (full versions)
     for slug in skipped_layers:
         log.info(f"Skipping {slug} (file too large for current Railway plan)")
     for slug in vector_layers:

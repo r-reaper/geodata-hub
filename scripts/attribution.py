@@ -32,7 +32,8 @@ LAYER_SOURCES = {
     "pois":      "osm",
 
     # Additional sources (added later)
-    "ms_buildings":      "microsoft",
+    "ms_buildings":         "microsoft",
+    "ms_buildings_urban":   "microsoft",
     "google_buildings":  "google",
     "worldpop":          "worldpop",
     "srtm":              "nasa_srtm",
