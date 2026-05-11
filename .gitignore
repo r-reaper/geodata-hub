@@ -1,7 +1,8 @@
-# Secrets — never commit
+# Secrets & user state — never commit
 backend/.env
 frontend/.env.local
 backend/credits.json
+backend/history.json
 
 # Python
 __pycache__/

@@ -10,6 +10,7 @@ import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { useT, type Lang } from "../lib/i18n";
 import { APP_VERSION, CHANGELOG } from "../lib/changelog";
+import { initAnalytics, events as track, identify } from "../lib/analytics";
 
 // ─────────────────────────────────────────────
 // Types
@@ -254,8 +255,12 @@ export default function MapSelector() {
   // ─────────────────────────────────────────────
   useEffect(() => {
     if (typeof window === "undefined") return;
+    initAnalytics();
     const saved = localStorage.getItem(STORAGE.email);
-    if (saved && isValidEmail(saved)) setUserId(saved);
+    if (saved && isValidEmail(saved)) {
+      setUserId(saved);
+      identify(saved);
+    }
     if (!localStorage.getItem(STORAGE.seenIntro)) setShowIntro(true);
     const savedCrs = localStorage.getItem(STORAGE.crs);
     if (savedCrs && CRS_OPTIONS.some((o) => o.code === savedCrs)) setTargetCrs(savedCrs);
@@ -268,6 +273,7 @@ export default function MapSelector() {
     setShowChangelog(true);
     setHasUnseenChangelog(false);
     try { localStorage.setItem(STORAGE.seenVersion, APP_VERSION); } catch {}
+    track.changelogOpened(APP_VERSION);
   };
 
   const refreshCredits = useCallback(async (uid: string | null = userId) => {
@@ -294,6 +300,8 @@ export default function MapSelector() {
     const e = email.trim().toLowerCase();
     localStorage.setItem(STORAGE.email, e);
     setUserId(e);
+    identify(e);
+    track.signedIn("email");
     setShowLogin(false);
     showToast(t("toast.signedIn", { email: e }), "success");
     // After login, resume any pending action
@@ -307,6 +315,8 @@ export default function MapSelector() {
     setUserId(null);
     setCredits(null);
     setHistory(null);
+    identify(null);
+    track.signedOut();
     showToast(t("toast.signedOut"), "info");
   };
 
@@ -441,6 +451,10 @@ export default function MapSelector() {
         try { localStorage.setItem(STORAGE.aoi, JSON.stringify(feat)); } catch {}
         const src = map.getSource("aoi") as mapboxgl.GeoJSONSource | undefined;
         src?.setData({ type: "FeatureCollection", features: [feat] });
+        // Centroid for analytics
+        const cx = coords.reduce((s, c) => s + c[0], 0) / coords.length;
+        const cy = coords.reduce((s, c) => s + c[1], 0) / coords.length;
+        track.aoiDrawn(approxAreaKm2(feat), cx, cy);
         cleanup();
         setIsDrawing(false);
         showToast(t("toast.areaDefined"), "success");
@@ -563,6 +577,7 @@ export default function MapSelector() {
     setPreview(null);
     try { localStorage.removeItem(STORAGE.aoi); } catch {}
     setAoiOnMapRef.current(null);
+    track.aoiCleared();
   };
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -581,6 +596,7 @@ export default function MapSelector() {
     const lons = coords.map((c) => c[0]);
     const lats = coords.map((c) => c[1]);
     mapRef.current?.fitBounds([[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]], { padding: 60 });
+    track.aoiUploaded((file.name.split(".").pop() || "unknown").toLowerCase());
     showToast(t("toast.aoiLoaded", { file: file.name }), "success");
     e.target.value = "";
   };
@@ -616,17 +632,24 @@ export default function MapSelector() {
   // Layer/format toggles
   // ─────────────────────────────────────────────
   const toggleLayerSelected = (slug: string) => {
+    let wasSelected = false;
     setSelectedLayers((prev) => {
       const n = new Set(prev);
-      if (n.has(slug)) n.delete(slug); else n.add(slug);
+      wasSelected = n.has(slug);
+      if (wasSelected) n.delete(slug); else n.add(slug);
       return n;
     });
     setPreview(null);
+    track.layerSelected(slug, wasSelected ? "deselect" : "select");
   };
 
   const toggleLayerVisible = (slug: string) => {
-    if (visibleLayersRef.current.has(slug)) hideLayerFromMap(slug);
-    else showLayerOnMap(slug);
+    if (visibleLayersRef.current.has(slug)) {
+      hideLayerFromMap(slug);
+    } else {
+      showLayerOnMap(slug);
+      track.layerPreviewClicked(slug);
+    }
   };
 
   const toggleFormat = (fmt: string) => {
@@ -644,6 +667,7 @@ export default function MapSelector() {
   const runPreview = async () => {
     if (!aoi || selectedLayers.size === 0) return;
     setLoadingPreview(true);
+    track.previewCountRequested(Array.from(selectedLayers), aoi ? approxAreaKm2(aoi) : 0);
     try {
       const r = await fetch(`${API_BASE}/preview`, {
         method: "POST",
@@ -667,6 +691,13 @@ export default function MapSelector() {
     // Donation model: all downloads are free; user_id only used for history.
     setFailedDownloadId(null);
     setLoadingDownload(true);
+    const downloadStartedAt = Date.now();
+    track.downloadClicked(
+      Array.from(selectedLayers),
+      Array.from(formats),
+      targetCrs,
+      preview ? Object.values(preview).reduce((s, p) => s + (p.feature_count || 0), 0) : undefined,
+    );
     try {
       const r = await fetch(`${API_BASE}/clip-data`, {
         method: "POST",
@@ -686,6 +717,11 @@ export default function MapSelector() {
       }
       // success — clear any prior failure
       setFailedDownloadId(null);
+      track.downloadSucceeded(
+        data.size_mb || 0,
+        (Date.now() - downloadStartedAt) / 1000,
+        data.total_features || 0,
+      );
       if (data.presigned_url) {
         window.open(data.presigned_url, "_blank");
         showToast(t("toast.downloadOk", { file: data.filename }), "success");
@@ -697,6 +733,7 @@ export default function MapSelector() {
       // Refresh history if drawer is open
       if (showHistory && uid) loadHistory(uid);
     } catch (e: any) {
+      track.downloadFailed(e.message || String(e));
       showToast(t("toast.downloadFail", { err: e.message || String(e) }), "error");
     } finally {
       setLoadingDownload(false);
@@ -732,6 +769,7 @@ export default function MapSelector() {
 
   const reDownload = async (download_id: string) => {
     if (!userId) { setShowLogin(true); return; }
+    track.redownloadClicked(download_id);
     try {
       const r = await fetch(`${API_BASE}/redownload`, {
         method: "POST",
@@ -855,6 +893,7 @@ export default function MapSelector() {
             href="https://www.buymeacoffee.com/kampanart"
             target="_blank"
             rel="noopener noreferrer"
+            onClick={() => track.donateMethodClicked("bmac")}
             className="flex items-center gap-1.5 px-4 py-2 rounded-md bg-yellow-400 hover:bg-yellow-500 text-slate-900 font-medium text-sm transition shadow-sm border-2 border-yellow-500"
             title="Buy Me a Coffee"
           >
@@ -864,7 +903,7 @@ export default function MapSelector() {
 
           {/* Secondary — discreet "other ways" link to open the modal with PromptPay + Card */}
           <button
-            onClick={() => setShowCredits(true)}
+            onClick={() => { setShowCredits(true); track.donateModalOpened("header_other"); }}
             className="px-2 py-1.5 rounded-md hover:bg-slate-100 text-slate-500 hover:text-slate-700 text-xs"
             title="Other donation methods (PromptPay, Card)"
           >
@@ -905,7 +944,7 @@ export default function MapSelector() {
 
           {/* Language toggle */}
           <button
-            onClick={toggleLang}
+            onClick={() => { const from = lang; toggleLang(); track.langSwitched(from, from === "en" ? "th" : "en"); }}
             className="px-2.5 py-1.5 rounded-md hover:bg-slate-100 text-slate-700 text-xs border border-slate-200"
             title={lang === "en" ? "เปลี่ยนเป็นภาษาไทย" : "Switch to English"}
           >
@@ -1078,7 +1117,7 @@ export default function MapSelector() {
                     <div className="text-[11px] text-slate-500 leading-tight font-light">{featureLabel}</div>
                   </div>
                   <button
-                    onClick={() => setLayerInfoSlug(l.slug)}
+                    onClick={() => { setLayerInfoSlug(l.slug); track.layerInfoOpened(l.slug); }}
                     title="View layer details"
                     className="w-7 h-7 rounded text-xs flex items-center justify-center text-slate-500 hover:bg-slate-200 hover:text-slate-900"
                   >
@@ -1296,6 +1335,7 @@ export default function MapSelector() {
           onClose={() => {
             setShowIntro(false);
             try { localStorage.setItem(STORAGE.seenIntro, "1"); } catch {}
+            track.introCompleted();
           }}
         />
       )}
@@ -1317,10 +1357,13 @@ export default function MapSelector() {
           onClose={() => setShowDownloadPrompt(false)}
           onContinue={() => {
             setShowDownloadPrompt(false);
+            track.preDownloadDecision("continue");
             runDownload();
           }}
           onDonate={() => {
             setShowDownloadPrompt(false);
+            track.preDownloadDecision("donate");
+            track.donateModalOpened("pre_download");
             setShowCredits(true);
           }}
         />
@@ -1441,6 +1484,8 @@ function DonateModal({ onClose }: { onClose: () => void }) {
     if (n > 50000) { setCardErr("Max ฿50,000"); return; }
     setCardErr(null);
     setCardLoading(true);
+    track.donateMethodClicked("card");
+    track.donationStarted(n, "card");
     try {
       const origin = typeof window !== "undefined" ? window.location.origin : "";
       const r = await fetch(`${API_BASE}/payments/donate`, {
@@ -1473,7 +1518,7 @@ function DonateModal({ onClose }: { onClose: () => void }) {
         </div>
 
         {/* ─── PromptPay (Thai, primary) ─── */}
-        <div className="border border-slate-200 rounded-xl p-4 bg-slate-50">
+        <div className="border border-slate-200 rounded-xl p-4 bg-slate-50" onClick={() => track.donateMethodClicked("promptpay")}>
           <p className="text-xs text-slate-700 mb-3 font-medium">{t("donate.promptpay")}</p>
 
           <div className="flex justify-center mb-3">
@@ -1562,6 +1607,7 @@ function DonateModal({ onClose }: { onClose: () => void }) {
               href="https://github.com/r-reaper/geodata-hub"
               target="_blank"
               rel="noopener noreferrer"
+              onClick={() => track.donateMethodClicked("github_star")}
               className="flex items-center justify-center gap-2 w-full py-1.5 px-3 text-xs text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 rounded-md font-light"
             >
               {t("donate.altStar")}
@@ -1570,6 +1616,7 @@ function DonateModal({ onClose }: { onClose: () => void }) {
               href="https://github.com/r-reaper/geodata-hub/issues/new"
               target="_blank"
               rel="noopener noreferrer"
+              onClick={() => track.donateMethodClicked("report_bug")}
               className="flex items-center justify-center gap-2 w-full py-1.5 px-3 text-xs text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 rounded-md font-light"
             >
               {t("donate.altReport")}
@@ -1702,6 +1749,7 @@ function PreDownloadPrompt({
 
 function ShareButton({ label }: { label: string }) {
   const onShare = async () => {
+    track.donateMethodClicked("share");
     const url = typeof window !== "undefined" ? window.location.origin : "";
     try {
       if (navigator.share) {
