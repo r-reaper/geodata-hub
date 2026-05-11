@@ -888,26 +888,14 @@ export default function MapSelector() {
             </span>
           )}
 
-          {/* Primary CTA — direct Buy Me a Coffee link, big and yellow */}
-          <a
-            href="https://www.buymeacoffee.com/kampanart"
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={() => track.donateMethodClicked("bmac")}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-md bg-yellow-400 hover:bg-yellow-500 text-slate-900 font-medium text-sm transition shadow-sm border-2 border-yellow-500"
-            title="Buy Me a Coffee"
-          >
-            <span className="text-base">☕</span>
-            <span>Buy Me a Coffee</span>
-          </a>
-
-          {/* Secondary — discreet "other ways" link to open the modal with PromptPay + Card */}
+          {/* Outstanding colorful Donate button — primary CTA in header */}
           <button
-            onClick={() => { setShowCredits(true); track.donateModalOpened("header_other"); }}
-            className="px-2 py-1.5 rounded-md hover:bg-slate-100 text-slate-500 hover:text-slate-700 text-xs"
-            title="Other donation methods (PromptPay, Card)"
+            onClick={() => { setShowCredits(true); track.donateModalOpened("header"); }}
+            className="relative flex items-center gap-1.5 px-4 py-2 rounded-md bg-gradient-to-r from-pink-500 via-rose-500 to-orange-500 hover:from-pink-600 hover:via-rose-600 hover:to-orange-600 text-white font-medium text-sm transition shadow-md hover:shadow-lg ring-2 ring-pink-200 hover:ring-pink-300"
+            title="Support this project"
           >
-            ⋯
+            <span className="text-base">💝</span>
+            <span>Donate</span>
           </button>
 
           {/* History button */}
@@ -1474,38 +1462,6 @@ function EmailLoginModal({ onClose, onSubmit }: { onClose: () => void; onSubmit:
 // ── Credits / buy-pack modal
 function DonateModal({ onClose }: { onClose: () => void }) {
   const { t } = useT();
-  const [cardAmount, setCardAmount] = useState<number | "">(100);
-  const [cardLoading, setCardLoading] = useState(false);
-  const [cardErr, setCardErr] = useState<string | null>(null);
-
-  const handleCardDonate = async () => {
-    const n = typeof cardAmount === "number" ? cardAmount : parseInt(String(cardAmount), 10);
-    if (!n || n < 20) { setCardErr(t("donate.cardMin")); return; }
-    if (n > 50000) { setCardErr("Max ฿50,000"); return; }
-    setCardErr(null);
-    setCardLoading(true);
-    track.donateMethodClicked("card");
-    track.donationStarted(n, "card");
-    try {
-      const origin = typeof window !== "undefined" ? window.location.origin : "";
-      const r = await fetch(`${API_BASE}/payments/donate`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          amount_thb:   n,
-          redirect_url: `${origin}/credits?success=1`,
-          cancel_url:   `${origin}/credits?canceled=1`,
-        }),
-      });
-      const d = await r.json();
-      if (!r.ok || !d.checkout_url) throw new Error(d?.detail || `HTTP ${r.status}`);
-      window.location.href = d.checkout_url;
-    } catch (e: any) {
-      setCardErr(e.message || String(e));
-      setCardLoading(false);
-    }
-  };
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 overflow-y-auto" onClick={onClose}>
       <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 my-8" onClick={(e) => e.stopPropagation()}>
@@ -1541,62 +1497,17 @@ function DonateModal({ onClose }: { onClose: () => void }) {
           </div>
         </div>
 
-        {/* ─── Credit/debit card via Stripe ─── */}
-        <div className="mt-3 border border-slate-200 rounded-xl p-4">
-          <p className="text-xs text-slate-700 mb-2 font-medium">{t("donate.cardTitle")}</p>
-
-          {/* Preset amounts */}
-          <div className="grid grid-cols-4 gap-1.5 mb-2">
-            {[50, 100, 300, 500].map((amt) => (
-              <button
-                key={amt}
-                onClick={() => setCardAmount(amt)}
-                className={`py-1.5 text-sm rounded border transition ${
-                  cardAmount === amt
-                    ? "bg-blue-600 text-white border-blue-600"
-                    : "bg-white text-slate-700 border-slate-300 hover:bg-slate-50"
-                }`}
-              >
-                ฿{amt}
-              </button>
-            ))}
-          </div>
-
-          {/* Custom amount input */}
-          <div className="flex gap-1.5 mb-2">
-            <div className="relative flex-1">
-              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-sm pointer-events-none">฿</span>
-              <input
-                type="number"
-                inputMode="numeric"
-                min={20}
-                max={50000}
-                value={cardAmount === "" ? "" : cardAmount}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  setCardAmount(v === "" ? "" : Math.max(0, parseInt(v, 10) || 0));
-                }}
-                placeholder={t("donate.cardCustomPh")}
-                className="w-full pl-6 pr-2 py-1.5 text-sm border border-slate-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-          </div>
-
-          <button
-            onClick={handleCardDonate}
-            disabled={cardLoading || !cardAmount || (cardAmount as number) < 20}
-            className="w-full py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-sm rounded transition"
-          >
-            {cardLoading
-              ? "Redirecting…"
-              : t("donate.cardPay", { n: typeof cardAmount === "number" ? cardAmount : "—" })}
-          </button>
-
-          {cardErr && <p className="text-[11px] text-red-600 mt-1">{cardErr}</p>}
-          <p className="text-[10px] text-slate-500 mt-1 font-light">{t("donate.cardHint")}</p>
-        </div>
-
-        {/* BMaC moved to header. The modal title mentions it as a hint. */}
+        {/* ─── Buy Me a Coffee (international) ─── */}
+        <a
+          href="https://buymeacoffee.com/kampanart"
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={() => track.donateMethodClicked("bmac")}
+          className="mt-3 flex flex-col items-center justify-center gap-0.5 w-full py-3 px-4 bg-yellow-400 hover:bg-yellow-500 text-slate-900 font-medium rounded-lg transition shadow-sm border border-yellow-500"
+        >
+          <span className="text-base">☕ Buy Me a Coffee</span>
+          <span className="text-[10px] font-light opacity-80">{t("donate.bmacHint")}</span>
+        </a>
 
         {/* ─── Free ways to support ─── */}
         <div className="mt-4 pt-3 border-t border-slate-100">

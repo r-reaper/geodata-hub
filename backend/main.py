@@ -611,11 +611,19 @@ def layer_sample(slug: str, bbox: Optional[str] = None, limit: int = 200):
             "note": "Raster layer — preview not supported. Use Download to get the cropped GeoTIFF.",
         }
 
-    data_file = Path(__file__).parent.parent / "data" / f"{slug}.geojson"
-    if not data_file.exists():
+    # Prefer .fgb (binary, indexed) over .geojson. Critical for ms_buildings_urban
+    # which is only stored as FlatGeobuf.
+    data_dir = Path(__file__).parent.parent / "data"
+    fgb_file = data_dir / f"{slug}.fgb"
+    gj_file  = data_dir / f"{slug}.geojson"
+    if fgb_file.exists():
+        data_file = fgb_file
+    elif gj_file.exists():
+        data_file = gj_file
+    else:
         raise HTTPException(
             status_code=404,
-            detail=f"No data available for layer '{slug}'. Run osm_fetcher.py first."
+            detail=f"No data available for layer '{slug}'."
         )
 
     try:

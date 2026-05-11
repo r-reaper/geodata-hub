@@ -10,8 +10,13 @@ const SOURCES = [
     license: "Open Database License (ODbL) v1.0",
     licenseUrl: "https://opendatacommons.org/licenses/odbl/1-0/",
     attribution: "© OpenStreetMap contributors",
-    layers: ["Provinces", "Districts", "Sub-districts", "Roads", "Waterways", "Railways", "Buildings (OSM)", "Land Use", "Natural Features", "National Parks", "Temples", "POIs"],
-    notes: "Crowd-sourced map data. Free to use commercially with attribution. Any database derived and publicly distributed must also be ODbL.",
+    layers: [
+      "Provinces", "Districts", "Sub-districts",
+      "Roads", "Waterways", "Railways",
+      "Buildings (OSM)", "Land Use", "Natural Features",
+      "National Parks", "Temples", "POIs",
+    ],
+    notes: "Crowd-sourced map data, the backbone of the catalog (12 layers). Free to use commercially with attribution. Any database derived from this data and publicly distributed must also be ODbL-licensed.",
   },
   {
     name: "Microsoft Building Footprints",
@@ -19,17 +24,8 @@ const SOURCES = [
     license: "Open Database License (ODbL) v1.0",
     licenseUrl: "https://opendatacommons.org/licenses/odbl/1-0/",
     attribution: "Building footprints © Microsoft",
-    layers: ["Microsoft Buildings"],
-    notes: "Microsoft AI-detected building footprints, ~7 million for Thailand. Same ODbL terms as OSM.",
-  },
-  {
-    name: "Google Open Buildings",
-    url: "https://sites.research.google/open-buildings/",
-    license: "Creative Commons Attribution 4.0 International (CC BY 4.0)",
-    licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
-    attribution: "Building footprints © Google",
-    layers: ["Google Buildings"],
-    notes: "Google AI-detected buildings with confidence scores. CC BY 4.0 — free commercial use with attribution.",
+    layers: ["Buildings (Microsoft, urban)"],
+    notes: "Microsoft AI-detected building footprints, cropped to 8 Thai metropolitan areas (Bangkok metro, Chiang Mai, Chiang Rai, Phuket, Pattaya, Hat Yai, Khon Kaen, Korat) — ~2.73 million buildings. Same ODbL terms as OSM.",
   },
   {
     name: "WorldPop",
@@ -37,8 +33,17 @@ const SOURCES = [
     license: "Creative Commons Attribution 4.0 International (CC BY 4.0)",
     licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
     attribution: "Population data © WorldPop, University of Southampton",
-    layers: ["Population"],
-    notes: "Gridded population estimates at 100 m resolution. CC BY 4.0 — free commercial use with citation.",
+    layers: ["Population (2020)"],
+    notes: "Gridded population estimates at 100 m resolution, UN-adjusted for 2020. Total ~70 M people across Thailand. CC BY 4.0 — free commercial use with citation.",
+  },
+  {
+    name: "NASA SRTM",
+    url: "https://www.earthdata.nasa.gov/sensors/srtm",
+    license: "Public domain (U.S. Government work)",
+    licenseUrl: "https://www.usa.gov/government-works",
+    attribution: "Elevation data: NASA SRTM",
+    layers: ["Elevation (SRTM 30m)"],
+    notes: "NASA Shuttle Radar Topography Mission, 1 arc-second (30 m) global digital elevation model. U.S. Government work — public domain, no restrictions. Elevation range covered: -96 m to 2,823 m (sea-level depressions to Doi Inthanon).",
   },
 ];
 
@@ -117,17 +122,31 @@ export default function AttributionsPage() {
         </div>
 
         <div className="mt-8 bg-blue-50 border border-blue-200 rounded-xl p-5">
-          <h3 className="font-bold text-blue-900 mb-2">How to attribute correctly</h3>
-          <p className="text-sm text-blue-900 mb-2">
+          <h3 className="font-medium text-blue-900 mb-2">How to attribute correctly</h3>
+          <p className="text-sm text-blue-900 mb-2 font-light">
             When you publish a map, app, or report using data from Thai GeoData Hub, include the attribution lines from the <code className="bg-white px-1 rounded text-xs">ATTRIBUTION.txt</code> inside your downloaded ZIP. Typically a one-line credit at the bottom of your map or in your About page is enough.
           </p>
-          <p className="text-sm text-blue-900">
-            For ODbL data (OSM, Microsoft Buildings), if you publish a database derived from this data, the derived database must also be ODbL-licensed. For CC BY data (Google Buildings, WorldPop), you only need to give credit — your derived work can be any license.
+          <p className="text-sm text-blue-900 font-light">
+            For <strong>ODbL</strong> data (OSM, Microsoft Buildings), if you publish a database derived from this data, the derived database must also be ODbL-licensed. For <strong>CC BY 4.0</strong> data (WorldPop), you only need to give credit — your derived work can be any license. <strong>NASA SRTM</strong> is public domain with no restrictions, but crediting NASA is good practice.
           </p>
         </div>
 
-        <p className="mt-6 text-xs text-slate-400 text-center">
-          We do <strong>not</strong> redistribute proprietary or commercial-restricted data (RTSD topo maps, Department of Land cadastre, GISTDA satellite imagery, GADM, etc.). If you need those, contact the original agencies directly.
+        <div className="mt-6 bg-slate-50 border border-slate-200 rounded-xl p-4 text-xs text-slate-600 font-light">
+          <p className="mb-1.5">
+            <strong className="text-slate-900">Not redistributed here</strong> (would require explicit permissions):
+          </p>
+          <ul className="list-disc list-inside space-y-0.5 ml-1">
+            <li>Royal Thai Survey Department (RTSD) topographic maps</li>
+            <li>Department of Land cadastre / property parcels</li>
+            <li>GISTDA satellite imagery (THEOS, THEOS-2)</li>
+            <li>GADM administrative boundaries (not free for commercial)</li>
+            <li>Google Open Buildings (full v3 dataset — temporarily excluded for storage)</li>
+          </ul>
+          <p className="mt-2">If you need those, contact the original agencies directly.</p>
+        </div>
+
+        <p className="mt-6 text-[11px] text-slate-400 text-center font-light">
+          © {new Date().getFullYear()} Thai GeoData Hub · Open data redistribution under each source&apos;s license
         </p>
       </div>
     </div>
