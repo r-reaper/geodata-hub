@@ -10,7 +10,7 @@ import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { useT, type Lang } from "../lib/i18n";
 import { APP_VERSION, CHANGELOG } from "../lib/changelog";
-import { initAnalytics, events as track, identify } from "../lib/analytics";
+import { initAnalytics, events as track, identify, track as rawTrack } from "../lib/analytics";
 
 // ─────────────────────────────────────────────
 // Types
@@ -233,6 +233,8 @@ export default function MapSelector() {
   const [showLogin, setShowLogin] = useState(false);
   const [showCredits, setShowCredits] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [showFeedback, setShowFeedback] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false); // bottom-sheet drawer on small screens
   const [showIntro, setShowIntro] = useState(false);
   const [pendingAction, setPendingAction] = useState<null | "download" | "buy">(null);
   const [layerInfoSlug, setLayerInfoSlug] = useState<string | null>(null);
@@ -323,24 +325,20 @@ export default function MapSelector() {
   // ─────────────────────────────────────────────
   // API health
   // ─────────────────────────────────────────────
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      for (let i = 0; i < 3; i++) {
-        try {
-          const r = await fetch(`${API_BASE}/health`, { signal: AbortSignal.timeout(20000) });
-          if (cancelled) return;
-          if (r.ok) { setApiOk(true); return; }
-        } catch {}
-        if (i < 2) await new Promise((r) => setTimeout(r, 5000));
-      }
-      if (!cancelled) {
-        setApiOk(false);
-        showToast("Backend is waking up — refresh in 30 s if layers don't load", "error");
-      }
-    })();
-    return () => { cancelled = true; };
+  const checkApi = useCallback(async () => {
+    setApiOk(null);
+    for (let i = 0; i < 3; i++) {
+      try {
+        const r = await fetch(`${API_BASE}/health`, { signal: AbortSignal.timeout(20000) });
+        if (r.ok) { setApiOk(true); return; }
+      } catch {}
+      if (i < 2) await new Promise((r) => setTimeout(r, 5000));
+    }
+    setApiOk(false);
+    showToast("Backend is waking up — try again in 30 s if it doesn't recover", "error");
   }, [showToast]);
+
+  useEffect(() => { checkApi(); }, [checkApi]);
 
   // Layer counts
   useEffect(() => {
@@ -422,7 +420,12 @@ export default function MapSelector() {
       cleanup();
       drawing.active = true;
       setIsDrawing(true);
-      map.getCanvas().style.cursor = "crosshair";
+      // High-contrast crosshair cursor: dark cross with white halo so it stays
+      // visible whether the basemap underneath is light (default streets) or
+      // dark (water, forest, satellite). The default browser `crosshair` is a
+      // 1-px black line that disappears against dark map tiles.
+      map.getCanvas().style.cursor =
+        "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28'><circle cx='14' cy='14' r='2.5' fill='%232563EB' stroke='white' stroke-width='1.5'/><line x1='14' y1='1' x2='14' y2='9' stroke='white' stroke-width='3'/><line x1='14' y1='1' x2='14' y2='9' stroke='%23111827' stroke-width='1.5'/><line x1='14' y1='19' x2='14' y2='27' stroke='white' stroke-width='3'/><line x1='14' y1='19' x2='14' y2='27' stroke='%23111827' stroke-width='1.5'/><line x1='1' y1='14' x2='9' y2='14' stroke='white' stroke-width='3'/><line x1='1' y1='14' x2='9' y2='14' stroke='%23111827' stroke-width='1.5'/><line x1='19' y1='14' x2='27' y2='14' stroke='white' stroke-width='3'/><line x1='19' y1='14' x2='27' y2='14' stroke='%23111827' stroke-width='1.5'/></svg>\") 14 14, crosshair";
 
       drawing.onClick = (e: mapboxgl.MapMouseEvent) => {
         const ll: [number, number] = [e.lngLat.lng, e.lngLat.lat];
@@ -853,6 +856,7 @@ export default function MapSelector() {
   // ─────────────────────────────────────────────
   return (
     <div
+      className="app-shell"
       style={{
         display: "grid",
         gridTemplateRows: "56px 1fr",
@@ -867,13 +871,22 @@ export default function MapSelector() {
       {/* ── Top bar ── */}
       <header
         style={{ gridArea: "header" }}
-        className="bg-white border-b border-slate-200 px-5 flex items-center justify-between shadow-sm z-20"
+        className="app-header bg-white border-b border-slate-200 px-5 flex items-center justify-between shadow-sm z-20"
       >
         <div className="flex items-center gap-3">
+          {/* Mobile-only hamburger to open the bottom-sheet drawer */}
+          <button
+            onClick={() => setMobileOpen((v) => !v)}
+            className="mobile-only items-center justify-center w-8 h-8 rounded-md hover:bg-slate-100 text-slate-700 text-lg"
+            title="Menu"
+            aria-label="Open menu"
+          >
+            ≡
+          </button>
           <span className="text-2xl">🇹🇭</span>
           <div>
             <h1 className="text-slate-900 leading-tight font-medium">{t("app.title")}</h1>
-            <p className="text-xs text-slate-500 leading-tight font-light">{t("app.tagline")}</p>
+            <p className="app-tagline text-xs text-slate-500 leading-tight font-light">{t("app.tagline")}</p>
           </div>
         </div>
         <div className="flex items-center gap-2 text-sm">
@@ -905,6 +918,15 @@ export default function MapSelector() {
             title={t("history.title")}
           >
             {t("btn.history")}
+          </button>
+
+          {/* Feedback / suggest a layer */}
+          <button
+            onClick={() => { setShowFeedback(true); rawTrack("feedback_opened"); }}
+            className="px-3 py-1.5 rounded-md hover:bg-blue-50 text-blue-700 text-xs border border-blue-200"
+            title={t("feedback.title")}
+          >
+            💬 {t("btn.feedback")}
           </button>
 
           {/* Attributions */}
@@ -962,8 +984,39 @@ export default function MapSelector() {
       {/* ── Side panel ── */}
       <aside
         style={{ gridArea: "side", overflowY: "auto" }}
-        className="bg-white border-r border-slate-200 flex flex-col"
+        className="app-side bg-white border-r border-slate-200 flex flex-col"
+        data-open={mobileOpen ? "true" : "false"}
       >
+        {/* Prominent error banner when backend is unreachable. The tiny red
+            badge in the header is too easy to miss — when /health fails the
+            user sees zero layer counts and doesn't know why. */}
+        {apiOk === false && (
+          <div className="m-3 p-4 rounded-lg bg-red-50 border border-red-200">
+            <div className="flex items-start gap-2">
+              <span className="text-2xl leading-none">⚠️</span>
+              <div className="flex-1">
+                <div className="text-sm font-medium text-red-900">{t("err.api.title")}</div>
+                <div className="text-xs text-red-800 mt-1 font-light">{t("err.api.body")}</div>
+                <button
+                  onClick={() => { checkApi(); rawTrack("api_retry_clicked"); }}
+                  className="mt-2 px-3 py-1.5 rounded-md bg-red-600 hover:bg-red-700 text-white text-xs font-medium"
+                >
+                  {t("err.api.retry")}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        {apiOk === null && (
+          <div className="m-3 p-3 rounded-lg bg-slate-50 border border-slate-200 flex items-center gap-2">
+            <svg className="animate-spin h-4 w-4 text-slate-500" viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" className="opacity-25" />
+              <path d="M22 12a10 10 0 0 1-10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+            </svg>
+            <span className="text-xs text-slate-600 font-light">{t("err.api.connecting")}</span>
+          </div>
+        )}
+
         {/* STEP 1 */}
         <Section step={1} title={t("step1.title")} done={!!aoi}>
           <div className="relative">
@@ -1309,6 +1362,10 @@ export default function MapSelector() {
         <DonateModal onClose={() => setShowCredits(false)} />
       )}
 
+      {showFeedback && (
+        <FeedbackModal onClose={() => setShowFeedback(false)} />
+      )}
+
       {showHistory && (
         <HistoryDrawer
           onClose={() => setShowHistory(false)}
@@ -1453,6 +1510,100 @@ function EmailLoginModal({ onClose, onSubmit }: { onClose: () => void; onSubmit:
         </div>
         <p className="mt-3 text-[11px] text-slate-500 font-light">
           {t("login.privacy")}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ── Feedback / suggest-a-layer modal
+// Lightweight: no backend endpoint. User picks a type, types a message,
+// and we open their email client with a prefilled `mailto:` to kamp.guitar@gmail.com.
+// Free, works on every device, and the inbox doubles as our roadmap board.
+function FeedbackModal({ onClose }: { onClose: () => void }) {
+  const { t, lang } = useT();
+  const [kind, setKind] = useState<"feedback" | "layer" | "data" | "bug">("feedback");
+  const [msg, setMsg] = useState("");
+  const [email, setEmail] = useState(() => {
+    try { return localStorage.getItem(STORAGE.email) || ""; } catch { return ""; }
+  });
+
+  const subjects: Record<typeof kind, string> = {
+    feedback: "[Feedback] ",
+    layer:    "[Layer request] ",
+    data:     "[Share data] ",
+    bug:      "[Bug] ",
+  };
+
+  const send = () => {
+    if (!msg.trim()) return;
+    rawTrack("feedback_submitted", { kind, has_email: !!email, lang });
+    const subject = encodeURIComponent(subjects[kind] + msg.slice(0, 60));
+    const body = encodeURIComponent(
+      `Type: ${kind}\n` +
+      `From: ${email || "(anonymous)"}\n` +
+      `Language: ${lang}\n` +
+      `Page: ${typeof window !== "undefined" ? window.location.href : ""}\n\n` +
+      `--- Message ---\n${msg}\n`
+    );
+    window.location.href = `mailto:kamp.guitar@gmail.com?subject=${subject}&body=${body}`;
+    setTimeout(onClose, 200);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 overflow-y-auto" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 my-8" onClick={(e) => e.stopPropagation()}>
+        <div className="flex justify-between items-start mb-4">
+          <div>
+            <h2 className="text-xl text-slate-900 font-medium">💬 {t("feedback.title")}</h2>
+            <p className="text-sm text-slate-600 mt-0.5 font-light">{t("feedback.subtitle")}</p>
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-700 text-xl leading-none">×</button>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2 mb-4">
+          {(["feedback", "layer", "data", "bug"] as const).map((k) => (
+            <button
+              key={k}
+              onClick={() => setKind(k)}
+              className={`text-xs py-2 px-3 rounded-lg border transition ${
+                kind === k
+                  ? "bg-blue-50 border-blue-400 text-blue-900 font-medium"
+                  : "bg-white border-slate-200 text-slate-600 hover:border-slate-300"
+              }`}
+            >
+              {t(`feedback.kind.${k}`)}
+            </button>
+          ))}
+        </div>
+
+        <label className="block text-xs text-slate-600 mb-1">{t("feedback.emailLabel")}</label>
+        <input
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="you@example.com"
+          className="w-full mb-3 px-3 py-2 rounded-md border border-slate-200 focus:border-blue-400 focus:outline-none text-sm"
+        />
+
+        <label className="block text-xs text-slate-600 mb-1">{t("feedback.msgLabel")}</label>
+        <textarea
+          value={msg}
+          onChange={(e) => setMsg(e.target.value)}
+          placeholder={t(`feedback.placeholder.${kind}`)}
+          rows={5}
+          className="w-full mb-4 px-3 py-2 rounded-md border border-slate-200 focus:border-blue-400 focus:outline-none text-sm resize-none"
+        />
+
+        <button
+          onClick={send}
+          disabled={!msg.trim()}
+          className="w-full py-2.5 rounded-md bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-sm font-medium transition"
+        >
+          {t("feedback.send")}
+        </button>
+        <p className="mt-3 text-[11px] text-slate-500 font-light text-center">
+          {t("feedback.privacy")}
         </p>
       </div>
     </div>
