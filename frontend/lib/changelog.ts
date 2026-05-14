@@ -8,7 +8,7 @@
 //      until the user clicks the changelog (we track the last-seen version
 //      in localStorage as "geodata_seen_version").
 
-export const APP_VERSION = "1.1.0";
+export const APP_VERSION = "1.2.0";
 
 export interface ChangelogEntry {
   version:    string;
@@ -21,6 +21,29 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "1.2.0",
+    date:    "2026-05-14",
+    tag:     "feature",
+    title_en: "UX polish — feedback, mobile, error states",
+    title_th: "ปรับ UX — ส่งข้อเสนอแนะ มือถือ และจัดการ error",
+    items_en: [
+      "💬 NEW: Feedback button — request a layer, share data, or report a bug",
+      "📱 Mobile-friendly: sidebar becomes a bottom-sheet drawer on phones",
+      "🎯 High-contrast drawing cursor — visible on any basemap color",
+      "⚠️ Prominent retry banner when the backend is waking up",
+      "🔍 Better SEO: bilingual title + rich link previews on LINE / Facebook / X",
+      "🧹 Repo cleanup: removed unused files, scrubbed local paths from history",
+    ],
+    items_th: [
+      "💬 ใหม่: ปุ่มข้อเสนอแนะ — ขอชั้นข้อมูลใหม่ แชร์ข้อมูล หรือแจ้งบั๊ก",
+      "📱 รองรับมือถือ: ไซด์บาร์กลายเป็นถาดเลื่อนขึ้นจากด้านล่าง",
+      "🎯 เคอร์เซอร์วาดพื้นที่ชัดเจน — มองเห็นได้บนทุกสีของแผนที่",
+      "⚠️ แบนเนอร์ลองใหม่เด่นชัดเมื่อ backend กำลังตื่นจากสลีป",
+      "🔍 SEO ดีขึ้น: ชื่อเว็บไทย/อังกฤษ พรีวิวลิงก์สวยบน LINE / Facebook / X",
+      "🧹 จัดระเบียบโค้ด: ลบไฟล์ที่ไม่ได้ใช้ ลบ path ส่วนตัวออกจากประวัติ git",
+    ],
+  },
   {
     version: "1.1.0",
     date:    "2026-05-11",
