@@ -8,7 +8,7 @@
 //      until the user clicks the changelog (we track the last-seen version
 //      in localStorage as "geodata_seen_version").
 
-export const APP_VERSION = "1.3.0";
+export const APP_VERSION = "1.3.1";
 
 export interface ChangelogEntry {
   version:    string;
@@ -21,6 +21,23 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "1.3.1",
+    date:    "2026-05-15",
+    tag:     "fix",
+    title_en: "iOS Safari fixes — map visible, cleaner mobile header",
+    title_th: "แก้ไข iOS Safari — แผนที่แสดงได้ ลดความรกของแถบบน",
+    items_en: [
+      "🐛 FIX: Map now renders on iPhone Safari (100vh → 100dvh)",
+      "📱 Mobile header decluttered: only ☰ menu, title, Donate, lang, sign in",
+      "🧰 Secondary actions (Feedback / History / Sources / Privacy / version) moved into a tap-friendly grid inside the bottom-sheet drawer",
+    ],
+    items_th: [
+      "🐛 แก้: แผนที่ขึ้นบน iPhone Safari แล้ว (เปลี่ยน 100vh เป็น 100dvh)",
+      "📱 แถบด้านบนบนมือถือเรียบง่ายขึ้น: เหลือแค่เมนู ☰ ชื่อ Donate ภาษา และเข้าสู่ระบบ",
+      "🧰 ปุ่มรอง (ข้อเสนอแนะ / ประวัติ / แหล่งข้อมูล / นโยบาย / เวอร์ชัน) ย้ายไปอยู่ในตารางในถาดเลื่อนขึ้น แตะง่าย",
+    ],
+  },
   {
     version: "1.3.0",
     date:    "2026-05-15",

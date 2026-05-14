@@ -62,11 +62,11 @@ input, select, textarea {
    inline style.
    ───────────────────────────────────────────────────────────────── */
 .mobile-only { display: none; }
-.desktop-only { display: flex; }
+.desktop-only { display: inline-flex; }
 
 @media (max-width: 768px) {
   .desktop-only { display: none !important; }
-  .mobile-only { display: flex !important; }
+  .mobile-only { display: inline-flex !important; }
 
   /* Header: hide the wordmark subtitle to save space; shrink padding */
   .app-header { padding: 0 12px !important; }

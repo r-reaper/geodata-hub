@@ -862,7 +862,12 @@ export default function MapSelector() {
         gridTemplateRows: "56px 1fr",
         gridTemplateColumns: "360px 1fr",
         gridTemplateAreas: '"header header" "side map"',
-        height: "100vh",
+        // 100dvh = dynamic viewport height. Fixes iOS Safari where 100vh
+        // includes the URL bar that later collapses, leaving the map with
+        // 0 visible height. Falls back to 100vh on browsers that don't
+        // support dvh (covered by the height: 100vh duplicate above? no —
+        // we set 100dvh only; modern Safari/Chrome/FF all support it 2022+).
+        height: "100dvh",
         width: "100vw",
         background: "#f8fafc",
         overflow: "hidden",
@@ -890,18 +895,19 @@ export default function MapSelector() {
           </div>
         </div>
         <div className="flex items-center gap-2 text-sm">
+          {/* API status badges — hidden on mobile to save space (banner in sidebar covers it) */}
           {apiOk === false && (
-            <span className="px-2 py-1 rounded-md bg-red-50 text-red-700 text-xs border border-red-200">
+            <span className="desktop-only px-2 py-1 rounded-md bg-red-50 text-red-700 text-xs border border-red-200">
               {t("app.offline")}
             </span>
           )}
           {apiOk === true && (
-            <span className="px-2 py-1 rounded-md bg-emerald-50 text-emerald-700 text-xs border border-emerald-200">
+            <span className="desktop-only px-2 py-1 rounded-md bg-emerald-50 text-emerald-700 text-xs border border-emerald-200">
               {t("app.online")}
             </span>
           )}
 
-          {/* Outstanding colorful Donate button — primary CTA in header */}
+          {/* Outstanding colorful Donate button — primary CTA, visible everywhere */}
           <button
             onClick={() => { setShowCredits(true); track.donateModalOpened("header"); }}
             className="relative flex items-center gap-1.5 px-4 py-2 rounded-md bg-gradient-to-r from-pink-500 via-rose-500 to-orange-500 hover:from-pink-600 hover:via-rose-600 hover:to-orange-600 text-white font-medium text-sm transition shadow-md hover:shadow-lg ring-2 ring-pink-200 hover:ring-pink-300"
@@ -911,46 +917,39 @@ export default function MapSelector() {
             <span>Donate</span>
           </button>
 
-          {/* History button */}
+          {/* Secondary actions — desktop only. Mobile users find these
+              in the bottom-sheet drawer toolbar (rendered below). */}
           <button
             onClick={openHistory}
-            className="px-3 py-1.5 rounded-md hover:bg-slate-100 text-slate-700 text-xs"
+            className="desktop-only px-3 py-1.5 rounded-md hover:bg-slate-100 text-slate-700 text-xs"
             title={t("history.title")}
           >
             {t("btn.history")}
           </button>
-
-          {/* Feedback / suggest a layer */}
           <button
             onClick={() => { setShowFeedback(true); rawTrack("feedback_opened"); }}
-            className="px-3 py-1.5 rounded-md hover:bg-blue-50 text-blue-700 text-xs border border-blue-200"
+            className="desktop-only px-3 py-1.5 rounded-md hover:bg-blue-50 text-blue-700 text-xs border border-blue-200"
             title={t("feedback.title")}
           >
             💬 {t("btn.feedback")}
           </button>
-
-          {/* Attributions */}
           <a
             href="/attributions"
-            className="px-3 py-1.5 rounded-md hover:bg-slate-100 text-slate-700 text-xs"
+            className="desktop-only px-3 py-1.5 rounded-md hover:bg-slate-100 text-slate-700 text-xs"
             title="Data sources & licenses"
           >
             {t("btn.sources")}
           </a>
-
-          {/* Privacy */}
           <a
             href="/privacy"
-            className="px-3 py-1.5 rounded-md hover:bg-slate-100 text-slate-500 text-xs"
+            className="desktop-only px-3 py-1.5 rounded-md hover:bg-slate-100 text-slate-500 text-xs"
             title={t("btn.privacy")}
           >
             {t("btn.privacy")}
           </a>
-
-          {/* Version + What's New */}
           <button
             onClick={openChangelog}
-            className="relative px-2 py-1.5 rounded-md hover:bg-slate-100 text-slate-500 text-[11px] font-mono"
+            className="desktop-only relative px-2 py-1.5 rounded-md hover:bg-slate-100 text-slate-500 text-[11px] font-mono"
             title={t("changelog.title")}
           >
             v{APP_VERSION}
@@ -960,8 +959,6 @@ export default function MapSelector() {
               </span>
             )}
           </button>
-
-          {/* Language toggle */}
           <button
             onClick={() => { const from = lang; toggleLang(); track.langSwitched(from, from === "en" ? "th" : "en"); }}
             className="px-2.5 py-1.5 rounded-md hover:bg-slate-100 text-slate-700 text-xs border border-slate-200"
@@ -996,6 +993,58 @@ export default function MapSelector() {
         className="app-side bg-white border-r border-slate-200 flex flex-col"
         data-open={mobileOpen ? "true" : "false"}
       >
+        {/* Mobile-only secondary toolbar — exposes Feedback / History /
+            Sources / Privacy / What's New that we hid from the cramped
+            mobile header. Grid of 5 chunky tap targets. */}
+        <div className="mobile-only flex-wrap gap-2 px-3 pt-2 pb-3 border-b border-slate-100" style={{ display: undefined }}>
+          <div className="grid grid-cols-3 gap-2 w-full">
+            <button
+              onClick={() => { setShowFeedback(true); rawTrack("feedback_opened"); setMobileOpen(false); }}
+              className="py-2 px-2 rounded-md bg-blue-50 text-blue-700 text-xs border border-blue-200"
+            >
+              💬 {t("btn.feedback")}
+            </button>
+            <button
+              onClick={() => { openHistory(); setMobileOpen(false); }}
+              className="py-2 px-2 rounded-md bg-slate-50 text-slate-700 text-xs border border-slate-200"
+            >
+              {t("btn.history")}
+            </button>
+            <a
+              href="/attributions"
+              className="flex items-center justify-center py-2 px-2 rounded-md bg-slate-50 text-slate-700 text-xs border border-slate-200"
+            >
+              {t("btn.sources")}
+            </a>
+            <a
+              href="/privacy"
+              className="flex items-center justify-center py-2 px-2 rounded-md bg-slate-50 text-slate-600 text-xs border border-slate-200"
+            >
+              {t("btn.privacy")}
+            </a>
+            <button
+              onClick={() => { openChangelog(); setMobileOpen(false); }}
+              className="relative py-2 px-2 rounded-md bg-slate-50 text-slate-600 text-[11px] font-mono border border-slate-200"
+            >
+              v{APP_VERSION}
+              {hasUnseenChangelog && (
+                <span className="absolute -top-1 -right-1 px-1 py-0 rounded-full bg-pink-500 text-white text-[8px] font-bold leading-tight">
+                  {t("changelog.badgeNew")}
+                </span>
+              )}
+            </button>
+            {apiOk === false ? (
+              <span className="flex items-center justify-center py-2 px-2 rounded-md bg-red-50 text-red-700 text-[11px] border border-red-200">
+                {t("app.offline")}
+              </span>
+            ) : (
+              <span className="flex items-center justify-center py-2 px-2 rounded-md bg-emerald-50 text-emerald-700 text-[11px] border border-emerald-200">
+                {t("app.online")}
+              </span>
+            )}
+          </div>
+        </div>
+
         {/* Prominent error banner when backend is unreachable. The tiny red
             badge in the header is too easy to miss — when /health fails the
             user sees zero layer counts and doesn't know why. */}
