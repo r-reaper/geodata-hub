@@ -206,6 +206,13 @@ export default function MapSelector() {
   // ── State (UI)
   const [mapReady, setMapReady] = useState(false);
   const [mapError, setMapError] = useState<string | null>(null);
+  // Real viewport height (in px). On iOS Safari `100vh` / `100dvh` are
+  // unreliable across iOS versions: 100vh includes the URL bar that later
+  // collapses (map ends up with 0 visible height) and dvh is iOS 16+ only.
+  // window.innerHeight always returns the actual visible area in CSS pixels.
+  // We initialise to undefined to avoid an SSR/hydration mismatch and fall
+  // back to 100vh on the very first paint.
+  const [viewportH, setViewportH] = useState<number | undefined>(undefined);
   const [apiOk, setApiOk] = useState<boolean | null>(null);
   const [aoi, setAoi] = useState<AOIFeature | null>(null);
   const [isDrawing, setIsDrawing] = useState(false);
@@ -340,6 +347,21 @@ export default function MapSelector() {
 
   useEffect(() => { checkApi(); }, [checkApi]);
 
+  // Track real viewport height for iOS Safari (see viewportH state comment).
+  // visualViewport.resize fires when the URL bar shows/hides; resize fires
+  // on rotation. Both events update the shell height so the map cell always
+  // matches what the user can actually see.
+  useEffect(() => {
+    const update = () => setViewportH(window.innerHeight);
+    update();
+    window.addEventListener("resize", update);
+    window.visualViewport?.addEventListener("resize", update);
+    return () => {
+      window.removeEventListener("resize", update);
+      window.visualViewport?.removeEventListener("resize", update);
+    };
+  }, []);
+
   // Layer counts
   useEffect(() => {
     if (apiOk !== true) return;
@@ -389,7 +411,13 @@ export default function MapSelector() {
     const ro = new ResizeObserver(resize);
     if (mapContainer.current) ro.observe(mapContainer.current);
     window.addEventListener("resize", resize);
+    // Force a few resize ticks after init — on iOS Safari the URL bar
+    // can collapse 0.5–1.5 s after first paint, and the WebGL canvas
+    // needs another resize() call to repaint at the new height.
+    window.visualViewport?.addEventListener("resize", resize);
     setTimeout(resize, 100);
+    setTimeout(resize, 500);
+    setTimeout(resize, 1500);
 
     // ── Drawing state machine
     const drawing = {
@@ -862,12 +890,10 @@ export default function MapSelector() {
         gridTemplateRows: "56px 1fr",
         gridTemplateColumns: "360px 1fr",
         gridTemplateAreas: '"header header" "side map"',
-        // 100dvh = dynamic viewport height. Fixes iOS Safari where 100vh
-        // includes the URL bar that later collapses, leaving the map with
-        // 0 visible height. Falls back to 100vh on browsers that don't
-        // support dvh (covered by the height: 100vh duplicate above? no —
-        // we set 100dvh only; modern Safari/Chrome/FF all support it 2022+).
-        height: "100dvh",
+        // Use JS-measured viewport on every browser (bulletproof on iOS
+        // Safari where 100vh and 100dvh both have quirks across versions).
+        // First paint (before useEffect runs) uses 100vh as a fallback.
+        height: viewportH ? `${viewportH}px` : "100vh",
         width: "100vw",
         background: "#f8fafc",
         overflow: "hidden",
@@ -1344,10 +1370,10 @@ export default function MapSelector() {
       </aside>
 
       {/* ── Map ── */}
-      <main style={{ gridArea: "map", position: "relative", overflow: "hidden" }}>
+      <main style={{ gridArea: "map", position: "relative", overflow: "hidden", minHeight: 300 }}>
         <div
           ref={mapContainer}
-          style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, width: "100%", height: "100%" }}
+          style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, width: "100%", height: "100%", minHeight: 300 }}
         />
 
         {!mapReady && !mapError && (

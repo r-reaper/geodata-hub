@@ -8,7 +8,7 @@
 //      until the user clicks the changelog (we track the last-seen version
 //      in localStorage as "geodata_seen_version").
 
-export const APP_VERSION = "1.3.1";
+export const APP_VERSION = "1.3.2";
 
 export interface ChangelogEntry {
   version:    string;
@@ -21,6 +21,23 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "1.3.2",
+    date:    "2026-05-15",
+    tag:     "fix",
+    title_en: "iOS Safari: map now visible (JS-driven viewport)",
+    title_th: "iOS Safari: เห็นแผนที่แล้ว",
+    items_en: [
+      "🐛 FIX: map invisible on older iPhones — measure viewport in JS instead of relying on dvh / 100vh",
+      "🔄 Map resizes when iOS URL bar collapses (visualViewport listener)",
+      "🛟 Map cell has a min-height fallback so it can't collapse to zero",
+    ],
+    items_th: [
+      "🐛 แก้: แผนที่ไม่ขึ้นบน iPhone รุ่นเก่า — วัดความสูงจอด้วย JS แทน",
+      "🔄 แผนที่ปรับขนาดอัตโนมัติเมื่อแถบ URL บน iOS หุบ",
+      "🛟 ช่องแผนที่มีความสูงขั้นต่ำกัน collapse",
+    ],
+  },
   {
     version: "1.3.1",
     date:    "2026-05-15",

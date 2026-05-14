@@ -9,6 +9,16 @@
 
 /* Minimal typography baseline: lighter default weight, optimised letter-spacing
    for the IBM Plex Sans Thai family, and smoother rendering. */
+/* Make html/body fill the viewport so percentage heights work, and
+   prevent iOS Safari from getting confused about scroll containment. */
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overscroll-behavior: none;
+  -webkit-overflow-scrolling: touch;
+}
+
 body {
   color: rgb(var(--foreground-rgb));
   background: rgb(var(--background-rgb));
