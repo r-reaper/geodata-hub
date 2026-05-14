@@ -22,8 +22,19 @@ data/*.tif
 data/*.zip
 data/.*_state.json
 
-# Worktrees (Claude internal)
-.claude/worktrees/
+# Claude / local IDE state — never commit (exposes local paths + username)
+.claude/
+.vscode/
+.idea/
+*.code-workspace
+
+# Local dev scripts & throwaway test artifacts — keep out of public repo
+debug_clip.py
+clip_test_extract/
+test_aoi*.json
+test_overpass.py
+clip_test/
+clip_result/
 
 # TypeScript build artifacts
 frontend/tsconfig.tsbuildinfo
