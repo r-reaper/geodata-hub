@@ -938,6 +938,15 @@ export default function MapSelector() {
             {t("btn.sources")}
           </a>
 
+          {/* Privacy */}
+          <a
+            href="/privacy"
+            className="px-3 py-1.5 rounded-md hover:bg-slate-100 text-slate-500 text-xs"
+            title={t("btn.privacy")}
+          >
+            {t("btn.privacy")}
+          </a>
+
           {/* Version + What's New */}
           <button
             onClick={openChangelog}

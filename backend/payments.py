@@ -180,13 +180,8 @@ class TopupRequest(BaseModel):
     credits: int
 
 
-class DonateRequest(BaseModel):
-    """One-time Stripe payment for an arbitrary THB amount. Not credits."""
-    amount_thb:   int                                     # e.g. 100, 500, custom
-    redirect_url: str = "http://localhost:3000/credits?success=1"
-    cancel_url:   str = "http://localhost:3000/credits?canceled=1"
-    email:        Optional[str] = None                    # optional, pre-fills Stripe
-    note:         Optional[str] = None                    # optional message from donor
+# DonateRequest model removed in v1.3 — Stripe card donations are disabled.
+# Donation flow uses PromptPay QR + Buy Me a Coffee directly (no server round-trip).
 
 
 # ─────────────────────────────────────────────
@@ -254,76 +249,8 @@ def create_checkout_session(req: CheckoutRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/donate")
-def create_donation_checkout(req: DonateRequest):
-    """
-    Create a Stripe Checkout session for a ONE-TIME DONATION of any amount.
-
-    This is separate from the credit-pack flow:
-      - Amount is in THB (not credits)
-      - No user_id required (donors stay anonymous)
-      - No credits granted; pure donation
-      - Min ฿20 (Stripe THB minimum), max ฿50,000 to keep things sane
-
-    Returns { checkout_url, session_id }.
-    """
-    if not STRIPE_SECRET_KEY:
-        raise HTTPException(
-            status_code=503,
-            detail="Stripe not configured. Set STRIPE_SECRET_KEY env var.",
-        )
-
-    if req.amount_thb < 20:
-        raise HTTPException(status_code=400, detail="Minimum donation is ฿20")
-    if req.amount_thb > 50_000:
-        raise HTTPException(status_code=400, detail="Maximum donation is ฿50,000")
-
-    try:
-        line_items = [
-            {
-                "price_data": {
-                    "currency": "thb",
-                    "product_data": {
-                        "name": "Thai GeoData Hub — Donation",
-                        "description": f"Thank you for supporting open Thai GIS data{' · ' + req.note if req.note else ''}",
-                    },
-                    "unit_amount": req.amount_thb * 100,  # THB → satang
-                },
-                "quantity": 1,
-            }
-        ]
-
-        session_kwargs = {
-            "payment_method_types": ["card"],
-            "line_items":          line_items,
-            "mode":                "payment",
-            "success_url":         req.redirect_url + "&donation=1&session_id={CHECKOUT_SESSION_ID}",
-            "cancel_url":          req.cancel_url,
-            "metadata": {
-                "type":   "donation",
-                "amount": str(req.amount_thb),
-                "note":   (req.note or "")[:200],
-            },
-            "billing_address_collection": "auto",
-            "submit_type": "donate",  # Stripe shows "Donate" instead of "Pay"
-        }
-        if req.email:
-            session_kwargs["customer_email"] = req.email
-
-        session = stripe.checkout.Session.create(**session_kwargs)
-        log.info(f"Donation checkout created: {session.id} for ฿{req.amount_thb}")
-        return {
-            "checkout_url": session.url,
-            "session_id":   session.id,
-            "amount_thb":   req.amount_thb,
-        }
-
-    except stripe.InvalidRequestError as e:
-        log.error(f"Stripe error: {e}")
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        log.error(f"Unexpected error creating donation checkout: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+# /donate endpoint removed in v1.3 — Stripe card donations disabled.
+# Project is donation-only via PromptPay QR + Buy Me a Coffee; no Stripe needed.
 
 
 @router.get("/credits/{user_id}")

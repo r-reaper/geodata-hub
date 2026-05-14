@@ -8,7 +8,7 @@
 //      until the user clicks the changelog (we track the last-seen version
 //      in localStorage as "geodata_seen_version").
 
-export const APP_VERSION = "1.2.0";
+export const APP_VERSION = "1.3.0";
 
 export interface ChangelogEntry {
   version:    string;
@@ -21,6 +21,27 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "1.3.0",
+    date:    "2026-05-15",
+    tag:     "feature",
+    title_en: "Launch-ready: favicon, OG previews, privacy page",
+    title_th: "พร้อมเปิดตัว: favicon, ลิงก์พรีวิว, หน้านโยบายความเป็นส่วนตัว",
+    items_en: [
+      "🎯 NEW: Favicon — Thai-flag map pin in the browser tab",
+      "🖼 NEW: Rich link previews on LINE / Facebook / X (auto-generated 1200×630)",
+      "🔒 NEW: /privacy page — clear PostHog disclosure, bilingual",
+      "💳 Stripe disabled — donation-only via PromptPay + Buy Me a Coffee",
+      "📖 README refreshed to match current architecture",
+    ],
+    items_th: [
+      "🎯 ใหม่: ไอคอนแท็บเบราว์เซอร์ — หมุดแผนที่สีธงไทย",
+      "🖼 ใหม่: พรีวิวลิงก์สวยบน LINE / Facebook / X (สร้างอัตโนมัติ 1200×630)",
+      "🔒 ใหม่: หน้า /privacy — ชี้แจงเรื่อง PostHog แบบสองภาษา",
+      "💳 ปิด Stripe — รับบริจาคผ่าน PromptPay + Buy Me a Coffee เท่านั้น",
+      "📖 ปรับ README ให้ตรงกับสถาปัตยกรรมจริง",
+    ],
+  },
   {
     version: "1.2.0",
     date:    "2026-05-14",

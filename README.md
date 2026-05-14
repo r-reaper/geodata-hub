@@ -1,175 +1,175 @@
-# 🇹🇭 Thai GeoData Hub
+# Thai GeoData Hub
 
-> Micro-SaaS platform for browsing, previewing, and clipping Thai spatial data (administrative boundaries, roads, water bodies, buildings) by Area of Interest (AOI).
+> Free, open Thai GIS data — clipped and downloaded by area of interest.
+> 15 layers across OSM, Microsoft Buildings, WorldPop, and NASA SRTM.
 
----
-
-## 🗺️ Architecture
-
-```
-OSM Overpass API
-       ↓
-osm_fetcher.py        ← Pulls raw OSM data for Thailand
-       ↓
-  PostGIS / PostgreSQL   ← Stores & indexes spatial data
-       ↓
-FastAPI Backend         ← REST API (layers, preview, clip, download)
-       ↓
-Next.js Frontend        ← Mapbox GL JS AOI selector + download UI
-       ↓
-User Browser            ← Downloads clipped .zip (SHP / GeoJSON / KML)
-```
+**Live:** [geodata-hub.vercel.app](https://geodata-hub.vercel.app)
 
 ---
 
-## 📁 Project Structure
+## What it does
+
+Draw a polygon (or upload a GeoJSON / KML) anywhere in Thailand, pick layers,
+hit download. You get a ZIP containing the clipped data as **SHP**, **GeoJSON**,
+and **KML**, plus per-source `ATTRIBUTION.txt` and `LICENSE.txt` files.
+
+No signup. No paywall. Donation-supported (PromptPay + Buy Me a Coffee).
+
+### Layers available (15 active)
+
+| Source | Layers |
+|---|---|
+| **OpenStreetMap** (ODbL) | Provinces, Districts, Sub-districts, Roads, Waterways, Railways, Buildings, Land use, Natural, Parks, Temples, POIs |
+| **Microsoft Building Footprints** (ODbL) | Buildings (urban subset — 2.73M across 8 metros) |
+| **WorldPop** (CC BY 4.0) | Population grid 2020 (100 m) |
+| **NASA SRTM** (public domain) | Elevation 30 m DEM |
+
+Not redistributed (would require explicit permission): RTSD topomaps,
+DOL cadastre, GISTDA satellite, GADM, Google Buildings v3.
+
+---
+
+## Architecture
+
+```
+┌──────────────────────────┐         ┌──────────────────────────┐
+│  Next.js (Vercel)        │ ─────►  │  FastAPI (Railway)       │
+│  - Mapbox GL JS          │  REST   │  - Layer catalog         │
+│  - i18n (TH / EN)        │ ◄─────  │  - AOI clip pipeline     │
+│  - PostHog analytics     │         │  - Multi-format export   │
+└──────────────────────────┘         └────────┬─────────────────┘
+                                              │
+                                              ▼
+                          ┌────────────────────────────────┐
+                          │ Local volume (Railway disk)    │
+                          │  data/{slug}.fgb   (FlatGeobuf)│
+                          │  data/{slug}.tif   (rasters)   │
+                          │  data/*_metadata.json          │
+                          └────────────────────────────────┘
+                                              ▲
+                                              │ initial seed
+                          ┌────────────────────────────────┐
+                          │ Cloudflare R2 (S3-compat)      │
+                          │  Backup of all source layers   │
+                          └────────────────────────────────┘
+```
+
+- **Storage model:** file-based (FlatGeobuf for vectors, GeoTIFF for rasters).
+  No Postgres / PostGIS in production — kept simpler so the free-tier
+  Railway container starts in seconds.
+- **State:** `credits.json` and `history.json` on container disk. Donation-only
+  mode, so losing them on redeploy is acceptable.
+
+---
+
+## Project structure
 
 ```
 GeoData_Hub/
-├── scripts/
-│   ├── db_schema.sql          ← PostGIS tables + indexes + triggers
-│   ├── osm_fetcher.py         ← Overpass API → PostGIS pipeline
-│   └── clipper_service.py     ← Core clipping logic + ZIP packaging
-├── backend/
-│   ├── main.py                ← FastAPI app (all endpoints)
-│   ├── requirements.txt
-│   └── Dockerfile
-├── frontend/
+├── backend/                 FastAPI app (deployed on Railway)
+│   ├── main.py              REST endpoints
+│   ├── payments.py          Stripe (currently disabled — donation mode)
+│   ├── history.py           Download history (file-backed)
+│   └── requirements.txt
+│
+├── frontend/                Next.js 14 app router (deployed on Vercel)
+│   ├── app/
+│   │   ├── page.tsx               Landing → MapSelector
+│   │   ├── attributions/page.tsx  Source credits + licenses
+│   │   ├── privacy/page.tsx       Privacy policy (TH / EN)
+│   │   ├── credits/page.tsx       Donation success page
+│   │   ├── icon.svg               Favicon
+│   │   └── opengraph-image.tsx    Auto-generated link previews
 │   ├── components/
-│   │   └── MapSelector.tsx   ← Interactive AOI map component
-│   └── ...                   ← Next.js App Router setup
-├── docker-compose.yml
-└── README.md
+│   │   └── MapSelector.tsx        Main app (map + sidebar + modals)
+│   └── lib/
+│       ├── i18n.ts                90+ bilingual strings
+│       ├── analytics.ts           PostHog wrapper (17 events)
+│       └── changelog.ts           Versioned release notes
+│
+├── scripts/                 One-off data ingestion (run locally)
+│   ├── osm_fetcher.py             Overpass API → FlatGeobuf
+│   ├── ms_buildings_fetcher.py    Microsoft Global Buildings → FGB
+│   ├── ms_buildings_urban_crop.py 4.7 GB → 542 MB urban subset
+│   ├── worldpop_fetcher.py        WorldPop GeoTIFF
+│   ├── srtm_fetcher.py            OpenTopography SRTM 30m
+│   ├── clipper_service.py         AOI clipping (vector + raster)
+│   ├── raster_clipper.py          Rasterio crop + reproject
+│   ├── s3_storage.py              R2 / S3 uploads + presigned URLs
+│   ├── attribution.py             Generates per-ZIP credit files
+│   └── convert_to_fgb.py          GeoJSON → FlatGeobuf utility
+│
+├── data/                    Layer metadata (per-slug JSON, tracked in git)
+│                            Actual .fgb / .tif files live on Railway disk
+│
+├── Dockerfile               Railway build entry
+└── railway.toml             Railway config
 ```
 
 ---
 
-## ⚡ Quick Start
+## Local development
 
-### 1. Spin up infrastructure
 ```bash
-docker compose up -d db
-```
-Waits for PostgreSQL to be ready (healthcheck).
-
-### 2. Run schema
-```bash
-docker compose up -d   # also starts API
-```
-Or manually:
-```bash
-psql -h localhost -U geodata_admin -d geodata_hub -f scripts/db_schema.sql
-```
-
-### 3. Fetch OSM data (first time)
-```bash
-cd scripts
-python osm_fetcher.py --ensure-schema --layer all
-```
-
-### 4. Start API
-```bash
+# Backend (FastAPI)
 cd backend
+python -m venv .venv && source .venv/bin/activate  # or .venv\Scripts\activate
 pip install -r requirements.txt
 uvicorn main:app --reload --port 8000
-```
 
-### 5. Start Frontend
-```bash
+# Frontend (Next.js)
 cd frontend
 npm install
+echo 'NEXT_PUBLIC_API_URL=http://localhost:8000' > .env.local
 npm run dev
 ```
 
----
+Visit http://localhost:3000.
 
-## 🌐 API Endpoints
-
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/layers` | List all available spatial layers |
-| GET | `/layers/{slug}` | Get metadata for one layer |
-| POST | `/preview` | Calculate feature count + size for AOI |
-| POST | `/clip-data` | Clip layers to AOI → return ZIP |
-| GET | `/credits/{user_id}` | Check user download credits |
-| POST | `/credits/topup` | Add credits to user account |
-| GET | `/health` | Health check |
-| POST | `/admin/refresh/{slug}` | Trigger OSM data refresh |
+For layer data, either:
+- copy `.fgb` / `.tif` files into `data/` from the R2 bucket, or
+- run `scripts/osm_fetcher.py --layer roads` etc. to fetch fresh
 
 ---
 
-## 📦 Fetching OSM Data
+## Deployment
 
-```bash
-# All layers
-python osm_fetcher.py --layer all --ensure-schema
+| Component | Host | Trigger |
+|---|---|---|
+| Frontend | Vercel | `git push` to main |
+| Backend  | Railway | `git push` to main |
+| Data     | Cloudflare R2 | Manual upload via `scripts/s3_storage.py` |
 
-# Individual layers
-python osm_fetcher.py --layer roads --ensure-schema
-python osm_fetcher.py --layer buildings --ensure-schema
-python osm_fetcher.py --layer waterways --ensure-schema
+Required env vars on Railway:
+```
+S3_ENDPOINT_URL, S3_ACCESS_KEY, S3_SECRET_KEY, S3_BUCKET_NAME
+ALLOWED_ORIGINS=https://geodata-hub.vercel.app
 ```
 
-Thailand bbox is split into 12 tiles automatically to avoid Overpass API timeout.
-
----
-
-## 🗂️ Clip & Download Pipeline
-
+Required env vars on Vercel:
 ```
-User draws polygon on Mapbox map
-        ↓
-POST /preview → estimates features + MB per layer
-        ↓
-User selects formats (SHP / GeoJSON / KML)
-        ↓
-POST /clip-data
-        ↓
-  GeoPandas: spatial intersection (clip)
-  GeoPandas: export to multiple drivers
-  ZIP all files together
-        ↓
-Return download link / trigger browser download
+NEXT_PUBLIC_API_URL=https://<your>.up.railway.app
+NEXT_PUBLIC_POSTHOG_KEY=phc_...   (optional — no-op if unset)
+NEXT_PUBLIC_MAPBOX_TOKEN=pk....
 ```
 
 ---
 
-## 💰 Credit System (Placeholder)
+## Licenses
 
-Each download deducts credits proportional to feature count.
-Plans: `free` (0 credits = disabled), `starter`, `pro`.
+- **Code:** open source (see project root, no LICENSE file enforced yet —
+  contributions welcome under MIT-style terms).
+- **Data:** each layer keeps its upstream license. ATTRIBUTION.txt and
+  LICENSE.txt are bundled in every download ZIP. ODbL data (OSM, Microsoft
+  Buildings) means derivative databases must also be ODbL.
 
-```sql
--- Add credits
-INSERT INTO user_credits (user_id, credits) VALUES ('user-uuid', 1000)
-  ON CONFLICT (user_id) DO UPDATE SET credits = credits + 1000;
-```
-
----
-
-## 🔄 Auto-Refresh (Cron)
-
-```bash
-# Every Sunday at 2 AM Thailand time (UTC+7 = 19:00 UTC)
-0 19 * * 0 cd /app/scripts && python osm_fetcher.py --layer all >> /var/log/geodata_refresh.log 2>&1
-```
+See `/attributions` page on the live site for the full table.
 
 ---
 
-## 🔑 Environment Variables
+## Contact
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `DATABASE_URL` | `postgresql://...` | PostgreSQL connection string |
-| `MAPBOX_TOKEN` | (set in component) | Mapbox GL JS access token |
-
----
-
-## ⚠️ TODO
-
-- [ ] Wire up `/credits/topup` Stripe checkout integration
-- [ ] S3/MinIO for pre-signed download URLs (currently uses temp files)
-- [ ] Redis rate limiting on API endpoints
-- [ ] Webhook for download completion notification
-- [ ] Admin dashboard for layer management
-- [ ] Thai address geocoding (THAI-GIS or ONEE API)
+- 💬 Feedback / layer requests: click the **Feedback** button on the site,
+  or email kamp.guitar@gmail.com
+- ☕ Support: [buymeacoffee.com/kampanart](https://buymeacoffee.com/kampanart)
+- 🇹🇭 PromptPay QR is on the donation modal

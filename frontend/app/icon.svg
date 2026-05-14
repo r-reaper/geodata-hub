@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Thai GeoData Hub favicon: map pin with Thai flag stripes -->
+  <defs>
+    <linearGradient id="pin" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#EF4444"/>
+      <stop offset="50%" stop-color="#FFFFFF"/>
+      <stop offset="50%" stop-color="#2563EB"/>
+      <stop offset="100%" stop-color="#2563EB"/>
+    </linearGradient>
+  </defs>
+  <path d="M32 4 C 18 4 8 14 8 28 C 8 44 32 60 32 60 C 32 60 56 44 56 28 C 56 14 46 4 32 4 Z"
+        fill="url(#pin)" stroke="#0F172A" stroke-width="2.5"/>
+  <circle cx="32" cy="26" r="8" fill="#0F172A"/>
+</svg>

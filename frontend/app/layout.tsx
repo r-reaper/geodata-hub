@@ -40,27 +40,16 @@ export const metadata: Metadata = {
     title: 'Thai GeoData Hub · Free Thai GIS data by area',
     description:
       'Clip and download Thai OSM, buildings, population, and elevation data for any area of interest. Free, open licenses.',
-    images: [
-      {
-        url: '/og-image.png',
-        width: 1200,
-        height: 630,
-        alt: 'Thai GeoData Hub — interactive map of Thailand with downloadable GIS layers',
-      },
-    ],
+    // OG image is generated dynamically by app/opengraph-image.tsx — no static
+    // file needed. Next.js wires the right tags automatically.
   },
   twitter: {
     card: 'summary_large_image',
     title: 'Thai GeoData Hub · Free Thai GIS data',
     description:
       'Clip Thai spatial data by area of interest — free, open-licensed, multi-format export.',
-    images: ['/og-image.png'],
   },
   robots: { index: true, follow: true },
-  // Drop a 1200×630 PNG at `frontend/public/og-image.png` to make link
-  // previews (LINE, Facebook, X, Slack) show a real screenshot of the map.
-  // Until that file exists, the OG image link will 404 but everything else
-  // (title, description, structured data) still works fine.
 }
 
 export default function RootLayout({

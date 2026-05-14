@@ -31,6 +31,7 @@ const dict: Record<Lang, Record<string, string>> = {
     "btn.sources":            "© Sources",
     "btn.donate":             "💝 Donate",
     "btn.feedback":           "Feedback",
+    "btn.privacy":            "Privacy",
     "btn.signin":             "Sign in",
 
     "feedback.title":              "Feedback & ideas",
@@ -191,6 +192,7 @@ const dict: Record<Lang, Record<string, string>> = {
     "btn.sources":            "© แหล่งข้อมูล",
     "btn.donate":             "💝 บริจาค",
     "btn.feedback":           "ข้อเสนอแนะ",
+    "btn.privacy":            "ความเป็นส่วนตัว",
     "btn.signin":             "เข้าสู่ระบบ",
 
     "feedback.title":              "ข้อเสนอแนะและไอเดีย",

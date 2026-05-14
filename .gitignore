@@ -16,11 +16,19 @@ venv/
 frontend/node_modules/
 frontend/.next/
 
-# Data (large GeoJSON files — store in R2, not git)
+# Data (large spatial files — store in R2 + Railway disk, never git)
 data/*.geojson
+data/*.fgb
+data/*.fgb.tmp
 data/*.tif
+data/*.tif.aux.xml
 data/*.zip
 data/.*_state.json
+data/*.shp
+data/*.shx
+data/*.dbf
+data/*.prj
+data/*.cpg
 
 # Claude / local IDE state — never commit (exposes local paths + username)
 .claude/
