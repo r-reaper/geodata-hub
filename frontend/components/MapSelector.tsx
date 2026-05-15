@@ -1391,47 +1391,6 @@ export default function MapSelector() {
           style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, width: "100%", height: "100%", minHeight: 300 }}
         />
 
-        {/* Mobile-only "use desktop" advisory. We don't block the experience —
-            users can still tap around — but most won't try to draw an AOI or
-            download once they see this. Persisted dismiss in localStorage. */}
-        {showDesktopBanner && (
-          <div className="mobile-only absolute top-3 left-3 right-3 z-30 bg-white rounded-xl shadow-2xl border border-amber-300 p-4" style={{ display: undefined }}>
-            <div className="flex items-start gap-3">
-              <span className="text-2xl leading-none flex-shrink-0">💻</span>
-              <div className="flex-1 min-w-0">
-                <div className="text-sm font-medium text-slate-900">
-                  {t("desktopBanner.title")}
-                </div>
-                <p className="text-xs text-slate-600 mt-1 font-light leading-snug">
-                  {t("desktopBanner.body")}
-                </p>
-                <div className="mt-3 flex gap-2">
-                  <button
-                    onClick={dismissDesktopBanner}
-                    className="px-3 py-1.5 rounded-md bg-slate-900 text-white text-xs font-medium"
-                  >
-                    {t("desktopBanner.ok")}
-                  </button>
-                  <a
-                    href="/attributions"
-                    className="px-3 py-1.5 rounded-md bg-slate-100 text-slate-700 text-xs font-medium"
-                  >
-                    {t("desktopBanner.browse")}
-                  </a>
-                </div>
-              </div>
-              <button
-                onClick={dismissDesktopBanner}
-                className="text-slate-400 hover:text-slate-700 text-lg leading-none flex-shrink-0"
-                aria-label="Dismiss"
-              >
-                ×
-              </button>
-            </div>
-          </div>
-        )}
-
-
         {!mapReady && !mapError && (
           <div className="absolute inset-0 flex items-center justify-center bg-slate-100/80 backdrop-blur-sm z-10">
             <div className="text-center">
@@ -1504,6 +1463,62 @@ export default function MapSelector() {
 
       {showFeedback && (
         <FeedbackModal onClose={() => setShowFeedback(false)} />
+      )}
+
+      {/* Mobile "open on desktop" banner — rendered at top level with
+          position: fixed so it shows even when the map cell is 0 height
+          on iOS Safari. Gated by JS (matchMedia in useEffect), so the
+          element never renders on desktop. */}
+      {showDesktopBanner && (
+        <div
+          style={{
+            position: "fixed",
+            top: 64,
+            left: 12,
+            right: 12,
+            zIndex: 9999,
+            background: "white",
+            borderRadius: 12,
+            boxShadow: "0 12px 32px rgba(0,0,0,0.18)",
+            border: "2px solid #FBBF24",
+            padding: 16,
+            maxWidth: 480,
+            margin: "0 auto",
+          }}
+        >
+          <div className="flex items-start gap-3">
+            <span className="text-2xl leading-none flex-shrink-0">💻</span>
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-medium text-slate-900">
+                {t("desktopBanner.title")}
+              </div>
+              <p className="text-xs text-slate-600 mt-1 font-light leading-snug">
+                {t("desktopBanner.body")}
+              </p>
+              <div className="mt-3 flex gap-2">
+                <button
+                  onClick={dismissDesktopBanner}
+                  className="px-3 py-1.5 rounded-md bg-slate-900 text-white text-xs font-medium"
+                >
+                  {t("desktopBanner.ok")}
+                </button>
+                <a
+                  href="/attributions"
+                  className="px-3 py-1.5 rounded-md bg-slate-100 text-slate-700 text-xs font-medium"
+                >
+                  {t("desktopBanner.browse")}
+                </a>
+              </div>
+            </div>
+            <button
+              onClick={dismissDesktopBanner}
+              className="text-slate-400 hover:text-slate-700 text-lg leading-none flex-shrink-0"
+              aria-label="Dismiss"
+            >
+              ×
+            </button>
+          </div>
+        </div>
       )}
 
       {showHistory && (

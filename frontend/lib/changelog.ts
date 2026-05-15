@@ -8,7 +8,7 @@
 //      until the user clicks the changelog (we track the last-seen version
 //      in localStorage as "geodata_seen_version").
 
-export const APP_VERSION = "1.3.3";
+export const APP_VERSION = "1.3.4";
 
 export interface ChangelogEntry {
   version:    string;
@@ -21,6 +21,19 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "1.3.4",
+    date:    "2026-05-15",
+    tag:     "fix",
+    title_en: "Mobile banner now actually visible on iPhone",
+    title_th: "แบนเนอร์มือถือขึ้นบน iPhone แล้วจริง",
+    items_en: [
+      "🐛 FIX: 'Open on desktop' banner was hidden inside the 0-height map cell on iOS — moved to position:fixed at top level with inline styles so it shows no matter what",
+    ],
+    items_th: [
+      "🐛 แก้: แบนเนอร์ 'เปิดบนคอมพิวเตอร์' ซ่อนอยู่ในช่องแผนที่ที่สูง 0 บน iOS — ย้ายไปอยู่ตำแหน่ง fixed ด้านบนสุดให้แสดงแน่นอน",
+    ],
+  },
   {
     version: "1.3.3",
     date:    "2026-05-15",
