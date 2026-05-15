@@ -67,13 +67,34 @@ def ensure_bucket_exists():
     return True
 
 
-def upload_file_to_s3(local_path: str, object_key: str) -> str | None:
+def upload_file_to_s3(
+    local_path: str,
+    object_key: str,
+    download_filename: str | None = None,
+) -> str | None:
     """
     Upload a local file to S3-compatible storage.
     Returns the presigned download URL or None on failure.
+
+    Args:
+        local_path: path to the file on disk.
+        object_key: S3 key to upload to (e.g. "downloads/abc.zip").
+        download_filename: user-friendly filename for browsers. Sets both
+            the stored object's Content-Disposition AND the presigned URL's
+            response-override params. Without this, Chrome flags the ZIP
+            as "Blocked / unverified download" because the response has no
+            attachment header. If None, we fall back to the bare object_key
+            (still better than nothing).
     """
     if not S3_ACCESS_KEY:
         return None
+
+    # Build the Content-Disposition value once and reuse for both the
+    # at-rest object metadata and the presigned URL's response override.
+    # Filename is double-quoted per RFC 6266; spaces / unicode in the
+    # filename are safe inside the quotes for any modern browser.
+    fname = download_filename or object_key.rsplit("/", 1)[-1]
+    content_disposition = f'attachment; filename="{fname}"'
 
     try:
         client = get_s3_client()
@@ -81,13 +102,24 @@ def upload_file_to_s3(local_path: str, object_key: str) -> str | None:
             Filename=str(local_path),
             Bucket=S3_BUCKET_NAME,
             Key=object_key,
-            ExtraArgs={"ContentType": "application/zip"},
+            ExtraArgs={
+                "ContentType": "application/zip",
+                "ContentDisposition": content_disposition,
+            },
         )
 
-        # Generate presigned URL
+        # Generate presigned URL with response-override params so that even
+        # if a different process generates a signed URL later without the
+        # override, the headers baked into the object above still apply.
+        # Belt-and-suspenders for Chrome's download-safety heuristic.
         presigned_url = client.generate_presigned_url(
             "get_object",
-            Params={"Bucket": S3_BUCKET_NAME, "Key": object_key},
+            Params={
+                "Bucket": S3_BUCKET_NAME,
+                "Key": object_key,
+                "ResponseContentDisposition": content_disposition,
+                "ResponseContentType": "application/zip",
+            },
             ExpiresIn=PRESIGN_EXPIRY_SECONDS,
         )
         log.info(f"Uploaded to S3: {object_key}")

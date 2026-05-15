@@ -8,7 +8,7 @@
 //      until the user clicks the changelog (we track the last-seen version
 //      in localStorage as "geodata_seen_version").
 
-export const APP_VERSION = "1.3.5";
+export const APP_VERSION = "1.3.6";
 
 export interface ChangelogEntry {
   version:    string;
@@ -21,6 +21,21 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "1.3.6",
+    date:    "2026-05-15",
+    tag:     "fix",
+    title_en: "Chrome no longer blocks ZIP downloads",
+    title_th: "Chrome ไม่บล็อกการดาวน์โหลด ZIP แล้ว",
+    items_en: [
+      "🐛 FIX: Chrome flagged every download as 'Blocked / unverified' — fixed by setting Content-Disposition: attachment on R2 objects + presigned URLs, and switching the trigger from window.open() to a programmatic <a download> click",
+      "📁 Downloads now save with a friendly filename (thai_geodata_<timestamp>.zip) instead of the cryptic R2 object key",
+    ],
+    items_th: [
+      "🐛 แก้: Chrome เคยบล็อกการดาวน์โหลดทุกครั้งและบอก 'ตรวจสอบไม่ได้' — แก้แล้วโดยใส่ header Content-Disposition และเปลี่ยนวิธี trigger จาก window.open เป็น <a download>",
+      "📁 ไฟล์ที่ดาวน์โหลดมีชื่อเป็น thai_geodata_<วันเวลา>.zip แทนรหัสยาว ๆ",
+    ],
+  },
   {
     version: "1.3.5",
     date:    "2026-05-15",

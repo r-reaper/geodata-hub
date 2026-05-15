@@ -660,15 +660,27 @@ def redownload(req: RedownloadRequest):
     try:
         from s3_storage import get_s3_client, S3_BUCKET_NAME
         client = get_s3_client()
+        # Filename to stamp into Content-Disposition on the response.
+        # Falls back to a generic name if the record is missing one.
+        filename = record.get("filename") or f"thai_geodata_{req.download_id[:8]}.zip"
         presigned_url = client.generate_presigned_url(
             "get_object",
-            Params={"Bucket": S3_BUCKET_NAME, "Key": s3_key},
+            Params={
+                "Bucket": S3_BUCKET_NAME,
+                "Key": s3_key,
+                # Force Content-Disposition: attachment on the response so
+                # Chrome doesn't flag the cross-origin ZIP as "Blocked /
+                # unverified". Works for objects uploaded before this fix
+                # too — these params override the at-rest headers.
+                "ResponseContentDisposition": f'attachment; filename="{filename}"',
+                "ResponseContentType": "application/zip",
+            },
             ExpiresIn=900,  # 15 minutes
         )
         return {
             "download_id": req.download_id,
             "presigned_url": presigned_url,
-            "filename": record.get("filename"),
+            "filename": filename,
             "expires_in_seconds": 900,
         }
     except Exception as e:

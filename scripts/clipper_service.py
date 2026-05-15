@@ -480,12 +480,19 @@ class ClipService:
             zf.writestr("README.txt",      build_readme_text(included_slugs, list(formats), total_features, target_crs))
 
         # ── Upload to S3 ──
+        # Compute the user-friendly filename up-front so we can stamp it
+        # into the R2 object's Content-Disposition header (stops Chrome
+        # from flagging the download as "Blocked / unverified") AND return
+        # the same string to the frontend.
+        download_filename = f"thai_geodata_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
         object_key = f"downloads/{download_id}.zip"
         presigned_url = None
         local_cleanup_needed = True
 
         if S3_AVAILABLE and upload_file_to_s3:
-            presigned_url = upload_file_to_s3(str(zip_path), object_key)
+            presigned_url = upload_file_to_s3(
+                str(zip_path), object_key, download_filename=download_filename
+            )
             if presigned_url:
                 local_cleanup_needed = True
                 log.info(f"Uploaded ZIP to S3: {object_key}")
@@ -494,7 +501,7 @@ class ClipService:
 
         return {
             "download_id": download_id,
-            "filename": f"thai_geodata_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip",
+            "filename": download_filename,
             "size_mb": round(total_size_mb, 3),
             "total_features": total_features,
             "layers_included": layer_slugs,

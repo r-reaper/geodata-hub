@@ -164,6 +164,35 @@ function parseAOIFile(text: string, filename: string): AOIFeature | null {
   return null;
 }
 
+/**
+ * Trigger a file download from a URL without using window.open().
+ *
+ * Why this exists: when we used `window.open(presigned_url, "_blank")` Chrome
+ * flagged every ZIP with "Blocked / Couldn't verify — keep file?". The
+ * combination of (a) cross-origin (R2 host ≠ vercel.app), (b) ZIP content
+ * type, and (c) a navigation-style trigger (window.open) hits Chrome's
+ * "unverified download" heuristic.
+ *
+ * A programmatically-clicked anchor with the `download` attribute is the
+ * strongest user-intent signal a browser has for "this is an attachment,
+ * not a navigation". Combined with the Content-Disposition: attachment
+ * header now set on the presigned URL response (see s3_storage.py), Chrome
+ * stops flagging the download.
+ *
+ * Note: Chrome ignores the `download` filename hint for cross-origin URLs
+ * (the filename comes from Content-Disposition instead), but the attribute's
+ * mere presence is what tames the warning.
+ */
+function triggerDownload(url: string, filename: string) {
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.rel = "noopener";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
 function approxAreaKm2(feature: AOIFeature): number {
   const coords = feature.geometry.type === "Polygon"
     ? feature.geometry.coordinates[0]
@@ -769,10 +798,10 @@ export default function MapSelector() {
         data.total_features || 0,
       );
       if (data.presigned_url) {
-        window.open(data.presigned_url, "_blank");
+        triggerDownload(data.presigned_url, data.filename || "thai_geodata.zip");
         showToast(t("toast.downloadOk", { file: data.filename }), "success");
       } else if (data.download_id) {
-        window.open(`${API_BASE}/download/${data.download_id}`, "_blank");
+        triggerDownload(`${API_BASE}/download/${data.download_id}`, "thai_geodata.zip");
       }
       // Refresh credits after a paid download
       if (uid) refreshCredits(uid);
@@ -824,7 +853,7 @@ export default function MapSelector() {
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data?.detail || `HTTP ${r.status}`);
-      window.open(data.presigned_url, "_blank");
+      triggerDownload(data.presigned_url, data.filename || "thai_geodata.zip");
       showToast(t("toast.redownloadOk", { file: data.filename || download_id }), "success");
       setFailedDownloadId(null);
     } catch (e: any) {
