@@ -104,11 +104,15 @@ def _free_memory() -> None:
             pass
 
 
-# Only allow ONE heavy clip-data request at a time per container. Other
-# requests wait their turn instead of all eating memory simultaneously.
-# Bump to 2 once we've migrated to pyogrio (Phase 2). uvicorn's own worker
-# pool is single-process, so this is sufficient on Railway Hobby.
-_CLIP_SEMAPHORE = asyncio.Semaphore(1)
+# Only allow ONE heavy data-loading request at a time per container.
+# This semaphore is shared between /clip-data AND /preview because both
+# load the same underlying layer files (.fgb / .tif) into geopandas /
+# rasterio and have identical memory profiles. Phase 1 only covered
+# clip-data, and the 2026-05-15 20:47 crash came from 3 parallel
+# /preview calls each loading ms_buildings_urban + 4 other layers
+# simultaneously (~1.5 GB on top of the 4 GB baseline → OOM).
+# Bump to 2 once we've migrated to pyogrio (Phase 2).
+_HEAVY_SEMAPHORE = asyncio.Semaphore(1)
 
 
 # ─────────────────────────────────────────────
@@ -364,19 +368,36 @@ LAYER_SOURCE_DEFAULTS = {
 
 
 @app.post("/preview")
-def preview_aoi(request: ClipDataRequest):
-    """Calculate feature count + estimated size for AOI. No credit charge."""
-    try:
-        results = clip_service.calculate_preview(request.aoi.model_dump(), request.layers)
-        return {"layers": results}
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        log.error(f"preview failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        # Reclaim heap from geopandas/fiona temporaries every preview.
-        _free_memory()
+async def preview_aoi(request: ClipDataRequest):
+    """Calculate feature count + estimated size for AOI. No credit charge.
+
+    Shares the heavy-work semaphore with /clip-data — both load the same
+    layer files and have identical memory profiles. Concurrent previews
+    were the root cause of the 2026-05-15 20:47 OOM crash.
+    """
+    if _HEAVY_SEMAPHORE.locked():
+        raise HTTPException(
+            status_code=503,
+            detail="Server is busy with another request. Please retry in 10 seconds.",
+        )
+    async with _HEAVY_SEMAPHORE:
+        loop = asyncio.get_event_loop()
+        try:
+            results = await loop.run_in_executor(
+                None,
+                lambda: clip_service.calculate_preview(
+                    request.aoi.model_dump(), request.layers
+                ),
+            )
+            return {"layers": results}
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except Exception as e:
+            log.error(f"preview failed: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
+        finally:
+            # Reclaim heap from geopandas/fiona temporaries every preview.
+            _free_memory()
 
 
 @app.post("/clip-data")
@@ -405,13 +426,13 @@ async def clip_data(request: ClipDataRequest, background_tasks: BackgroundTasks)
     # is mid-clip, return 503 immediately rather than queuing forever and
     # piling on memory pressure. Frontend retry banner will surface a
     # friendly "server busy" message.
-    if _CLIP_SEMAPHORE.locked():
+    if _HEAVY_SEMAPHORE.locked():
         raise HTTPException(
             status_code=503,
             detail="Server is busy clipping another request. Please retry in 30 seconds.",
         )
 
-    async with _CLIP_SEMAPHORE:
+    async with _HEAVY_SEMAPHORE:
         # Run blocking clip in a thread so we don't starve the event loop
         # and other endpoints (health, layers, search) stay responsive.
         loop = asyncio.get_event_loop()
@@ -888,12 +909,16 @@ def _sync_data_from_r2():
         elif needs is False:
             log.info(f"Data OK (local matches R2): {slug}.tif")
 
-    # Metadata files (small) — ALWAYS re-download from R2 so feature_count
-    # stays in sync when we replace a layer's data. Files are <1 KB each so
-    # this adds negligible cold-start time.
+    # Metadata files (small) — try to refresh from R2 so feature_count
+    # stays in sync when we replace a layer's data. Local copies ship in
+    # the Docker image as a fallback, so 404 here is non-fatal (downgraded
+    # to INFO log via quiet_404=True to avoid spamming Railway with ERROR
+    # lines that look scary but mean nothing).
     for slug in vector_layers + raster_layers:
         local_meta = data_dir / f"{slug}_metadata.json"
-        ok = download_file_from_s3(f"data/{slug}_metadata.json", str(local_meta))
+        ok = download_file_from_s3(
+            f"data/{slug}_metadata.json", str(local_meta), quiet_404=True
+        )
         if ok:
             log.info(f"Refreshed metadata: {slug}")
 

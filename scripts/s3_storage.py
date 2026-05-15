@@ -101,8 +101,15 @@ def upload_file_to_s3(local_path: str, object_key: str) -> str | None:
         return None
 
 
-def download_file_from_s3(object_key: str, local_path: str) -> bool:
-    """Download a file from S3-compatible storage to a local path."""
+def download_file_from_s3(object_key: str, local_path: str, quiet_404: bool = False) -> bool:
+    """Download a file from S3-compatible storage to a local path.
+
+    Args:
+        quiet_404: when True, log 404 (missing key) as INFO instead of ERROR.
+                   Used by the metadata-refresh path: some metadata JSONs
+                   aren't in R2 yet but local copies ship with the Docker
+                   image, so a 404 isn't a real failure.
+    """
     if not S3_ACCESS_KEY:
         return False
     try:
@@ -111,7 +118,17 @@ def download_file_from_s3(object_key: str, local_path: str) -> bool:
         log.info(f"Downloaded from S3: {object_key} → {local_path}")
         return True
     except ClientError as e:
-        log.error(f"S3 download failed for {object_key}: {e}")
+        # Detect 404 from the error code so we can downgrade the log level.
+        is_404 = False
+        try:
+            code = e.response.get("Error", {}).get("Code", "")
+            is_404 = code in ("404", "NoSuchKey")
+        except Exception:
+            pass
+        if is_404 and quiet_404:
+            log.info(f"S3 key missing (using local copy if any): {object_key}")
+        else:
+            log.error(f"S3 download failed for {object_key}: {e}")
         return False
     except Exception as e:
         log.error(f"Unexpected S3 download error for {object_key}: {e}")

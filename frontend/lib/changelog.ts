@@ -8,7 +8,7 @@
 //      until the user clicks the changelog (we track the last-seen version
 //      in localStorage as "geodata_seen_version").
 
-export const APP_VERSION = "1.3.4";
+export const APP_VERSION = "1.3.5";
 
 export interface ChangelogEntry {
   version:    string;
@@ -21,6 +21,23 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "1.3.5",
+    date:    "2026-05-15",
+    tag:     "fix",
+    title_en: "Stability fixes: no more OOM crashes + working park downloads",
+    title_th: "เซิร์ฟเวอร์ไม่ล่มอีก + ดาวน์โหลดอุทยานได้แล้ว",
+    items_en: [
+      "🐛 FIX: server crashed at 20:47 from 3 parallel previews loading 1.5 GB each. Preview now serialized like clip — 503 if busy",
+      "🐛 FIX: downloads with parks / natural layers were failing because shapefile can't mix Polygon + LineString in one file. We now drop edge artefacts and write the dominant type",
+      "🧹 Less log noise from missing metadata JSON files in R2",
+    ],
+    items_th: [
+      "🐛 แก้: เซิร์ฟเวอร์ล่มตอน 20:47 จาก preview พร้อมกัน 3 คำขอกินรวม 1.5 GB ตอนนี้ serialize เหมือน clip แล้ว — ส่ง 503 ถ้าไม่ว่าง",
+      "🐛 แก้: ดาวน์โหลดที่มีชั้นอุทยาน/ธรรมชาติล่ม เพราะ shapefile ผสม Polygon กับ LineString ไม่ได้ ตอนนี้กรอง geometry ที่ไม่เข้ากันออกแล้วเขียนชนิดหลักลงไป",
+      "🧹 ลด log error noise ตอน metadata json ไม่อยู่ใน R2",
+    ],
+  },
   {
     version: "1.3.4",
     date:    "2026-05-15",

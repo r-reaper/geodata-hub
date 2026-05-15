@@ -170,6 +170,39 @@ def gdf_to_bytes(gdf: gpd.GeoDataFrame, fmt: str, layer_name: str) -> bytes:
         Path(tmp.name).unlink()
         return data
     elif fmt == "shp":
+        # ESRI Shapefile requires a single geometry type per file. After
+        # AOI intersection a Polygon layer can yield mixed types (a Polygon
+        # touching the AOI edge can become a LineString or Point). Without
+        # filtering, fiona crashes mid-write with
+        #   "Attempt to write non-polygon (LINESTRING) geometry to POLYGON
+        #    type shapefile" — breaking the whole download.
+        #
+        # Strategy: keep only features whose geometry type matches the
+        # dominant (most common) type in this clipped layer. Drops at most
+        # a tiny fraction of edge artefacts; downstream GIS tools expect
+        # uniform-type shapefiles anyway.
+        if not gdf.empty:
+            type_counts = gdf.geometry.geom_type.value_counts()
+            dominant = type_counts.index[0]
+            # Each Multi/Single pair is shp-compatible — keep both.
+            COMPATIBLE = {
+                "Polygon":         {"Polygon", "MultiPolygon"},
+                "MultiPolygon":    {"Polygon", "MultiPolygon"},
+                "LineString":      {"LineString", "MultiLineString"},
+                "MultiLineString": {"LineString", "MultiLineString"},
+                "Point":           {"Point", "MultiPoint"},
+                "MultiPoint":      {"Point", "MultiPoint"},
+            }
+            keep = COMPATIBLE.get(dominant, {dominant})
+            before = len(gdf)
+            gdf = gdf[gdf.geometry.geom_type.isin(keep)]
+            dropped = before - len(gdf)
+            if dropped:
+                import logging as _log
+                _log.getLogger(__name__).info(
+                    f"{layer_name}: dropped {dropped} feature(s) with "
+                    f"incompatible geometry type (kept dominant={dominant})"
+                )
         tmpdir = Path(tempfile.mkdtemp())
         shp_path = tmpdir / f"{layer_name}.shp"
         gdf.to_file(shp_path, driver="ESRI Shapefile", encoding="utf-8")
