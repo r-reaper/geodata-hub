@@ -53,6 +53,11 @@ const dict: Record<Lang, Record<string, string>> = {
     "err.api.body":           "Layers and downloads need the API server. It may be waking up from sleep (free tier hosts pause after inactivity). Wait ~30 seconds and retry.",
     "err.api.retry":          "Retry connection",
     "err.api.connecting":     "Connecting to backend…",
+
+    "desktopBanner.title":    "Best on desktop",
+    "desktopBanner.body":     "Drawing an area of interest and downloading GIS data is much easier with a mouse and a larger screen. Open this link on your laptop or desktop when you're ready to download.",
+    "desktopBanner.ok":       "Got it",
+    "desktopBanner.browse":   "Browse layers anyway",
     "btn.signout":            "Sign out",
     "btn.lang":               "ไทย",
 
@@ -214,6 +219,11 @@ const dict: Record<Lang, Record<string, string>> = {
     "err.api.body":           "การโหลดชั้นข้อมูลและดาวน์โหลดต้องใช้เซิร์ฟเวอร์ API ตอนนี้อาจกำลังตื่นจากโหมดสลีป (โฮสต์ฟรีจะหยุดเมื่อไม่มีคนใช้) รอสัก 30 วินาทีแล้วลองอีกครั้ง",
     "err.api.retry":          "ลองเชื่อมต่ออีกครั้ง",
     "err.api.connecting":     "กำลังเชื่อมต่อ backend…",
+
+    "desktopBanner.title":    "ใช้บนคอมพิวเตอร์ได้ดีกว่า",
+    "desktopBanner.body":     "การวาดพื้นที่และดาวน์โหลดข้อมูล GIS ทำได้ง่ายกว่ามากบนคอม/โน้ตบุ๊กที่มีเมาส์และจอใหญ่ เปิดลิงก์นี้บนคอมเมื่อพร้อมดาวน์โหลด",
+    "desktopBanner.ok":       "เข้าใจแล้ว",
+    "desktopBanner.browse":   "ดูชั้นข้อมูลก่อนได้",
     "btn.signout":            "ออกจากระบบ",
     "btn.lang":               "EN",
 

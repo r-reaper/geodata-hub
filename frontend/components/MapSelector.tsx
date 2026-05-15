@@ -112,6 +112,7 @@ const CREDIT_PACKS = [
 
 const STORAGE = {
   email:       "geodata_email",
+  desktopBannerDismissed: "geodata_desktop_banner_dismissed",
   aoi:         "geodata_aoi",
   seenIntro:   "geodata_seen_intro",
   crs:         "geodata_target_crs",
@@ -242,6 +243,20 @@ export default function MapSelector() {
   const [showHistory, setShowHistory] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false); // bottom-sheet drawer on small screens
+  // Mobile users get a soft banner suggesting they switch to desktop.
+  // Persisted dismiss so repeat visitors aren't nagged.
+  const [showDesktopBanner, setShowDesktopBanner] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const dismissed = localStorage.getItem(STORAGE.desktopBannerDismissed) === "1";
+    const isMobile = window.matchMedia("(max-width: 768px)").matches;
+    setShowDesktopBanner(isMobile && !dismissed);
+  }, []);
+  const dismissDesktopBanner = () => {
+    setShowDesktopBanner(false);
+    try { localStorage.setItem(STORAGE.desktopBannerDismissed, "1"); } catch {}
+    rawTrack("desktop_banner_dismissed");
+  };
   const [showIntro, setShowIntro] = useState(false);
   const [pendingAction, setPendingAction] = useState<null | "download" | "buy">(null);
   const [layerInfoSlug, setLayerInfoSlug] = useState<string | null>(null);
@@ -1375,6 +1390,47 @@ export default function MapSelector() {
           ref={mapContainer}
           style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, width: "100%", height: "100%", minHeight: 300 }}
         />
+
+        {/* Mobile-only "use desktop" advisory. We don't block the experience —
+            users can still tap around — but most won't try to draw an AOI or
+            download once they see this. Persisted dismiss in localStorage. */}
+        {showDesktopBanner && (
+          <div className="mobile-only absolute top-3 left-3 right-3 z-30 bg-white rounded-xl shadow-2xl border border-amber-300 p-4" style={{ display: undefined }}>
+            <div className="flex items-start gap-3">
+              <span className="text-2xl leading-none flex-shrink-0">💻</span>
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-medium text-slate-900">
+                  {t("desktopBanner.title")}
+                </div>
+                <p className="text-xs text-slate-600 mt-1 font-light leading-snug">
+                  {t("desktopBanner.body")}
+                </p>
+                <div className="mt-3 flex gap-2">
+                  <button
+                    onClick={dismissDesktopBanner}
+                    className="px-3 py-1.5 rounded-md bg-slate-900 text-white text-xs font-medium"
+                  >
+                    {t("desktopBanner.ok")}
+                  </button>
+                  <a
+                    href="/attributions"
+                    className="px-3 py-1.5 rounded-md bg-slate-100 text-slate-700 text-xs font-medium"
+                  >
+                    {t("desktopBanner.browse")}
+                  </a>
+                </div>
+              </div>
+              <button
+                onClick={dismissDesktopBanner}
+                className="text-slate-400 hover:text-slate-700 text-lg leading-none flex-shrink-0"
+                aria-label="Dismiss"
+              >
+                ×
+              </button>
+            </div>
+          </div>
+        )}
+
 
         {!mapReady && !mapError && (
           <div className="absolute inset-0 flex items-center justify-center bg-slate-100/80 backdrop-blur-sm z-10">

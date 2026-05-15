@@ -8,7 +8,7 @@
 //      until the user clicks the changelog (we track the last-seen version
 //      in localStorage as "geodata_seen_version").
 
-export const APP_VERSION = "1.3.2";
+export const APP_VERSION = "1.3.3";
 
 export interface ChangelogEntry {
   version:    string;
@@ -21,6 +21,23 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "1.3.3",
+    date:    "2026-05-15",
+    tag:     "feature",
+    title_en: "Mobile visitors get a friendly 'open on desktop' nudge",
+    title_th: "ผู้ใช้มือถือเห็นคำแนะนำให้เปิดบนคอม",
+    items_en: [
+      "💻 NEW: Soft banner on phones suggesting users open the site on a desktop — GIS workflows are easier with a mouse and a larger screen",
+      "✕ Dismissible and persisted, so returning visitors aren't nagged",
+      "🗺 Map still loads for anyone who wants to try; donation / feedback / sources still work",
+    ],
+    items_th: [
+      "💻 ใหม่: แบนเนอร์บนมือถือ แนะนำให้เปิดบนคอมพิวเตอร์ — งาน GIS ใช้เมาส์และจอใหญ่จะง่ายกว่ามาก",
+      "✕ ปิดได้และจำไว้ ผู้ใช้กลับมาจะไม่เห็นซ้ำ",
+      "🗺 แผนที่ยังโหลดได้ปกติสำหรับคนที่อยากลอง บริจาค ส่งข้อเสนอแนะ ดูแหล่งข้อมูลใช้ได้หมด",
+    ],
+  },
   {
     version: "1.3.2",
     date:    "2026-05-15",
