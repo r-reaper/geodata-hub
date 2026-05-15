@@ -256,6 +256,16 @@ class ClipService:
         except Exception as e:
             raise ValueError(f"Invalid GeoJSON: {e}")
 
+        # Same hard cap as clip_and_package — preview loads the same data
+        # from disk, so it can OOM just as easily. See note in clip_and_package.
+        if aoi_geom.area > 0.15:
+            approx_km2 = int(aoi_geom.area * 12000)
+            raise ValueError(
+                f"AOI too large (≈{approx_km2:,} km²). "
+                f"Please split into smaller chunks under 1,800 km² each "
+                f"(roughly the size of Bangkok metro)."
+            )
+
         results = {}
         for slug in layer_slugs:
             try:
@@ -296,10 +306,16 @@ class ClipService:
                         "centroid": mapping(clipped.geometry.centroid.unary_union).get("coordinates")
                                     if not clipped.empty else None,
                     }
+                    # Free the per-layer dataframes immediately so memory
+                    # doesn't accumulate across layers in a multi-layer preview.
+                    del gdf, clipped
             except FileNotFoundError as e:
                 results[slug] = {"error": str(e)}
             except Exception as e:
                 results[slug] = {"error": str(e)}
+            finally:
+                import gc as _gc
+                _gc.collect()
         return results
 
     def clip_and_package(
@@ -317,8 +333,18 @@ class ClipService:
         except Exception as e:
             raise ValueError(f"Invalid AOI geometry: {e}")
 
-        if aoi_geom.area > 100:
-            raise ValueError("AOI too large. Please draw a smaller area.")
+        # Hard area cap. EPSG:4326 area is in degrees²; near Thailand latitudes
+        # (5°-20°N) one square degree ≈ 11,000-12,300 km². Cap of 0.15 deg² ≈
+        # 1,700-1,850 km², which still allows a single-shot Bangkok metro
+        # (1,569 km²) but blocks "select all of Thailand" requests that
+        # would OOM the container.
+        if aoi_geom.area > 0.15:
+            approx_km2 = int(aoi_geom.area * 12000)
+            raise ValueError(
+                f"AOI too large (≈{approx_km2:,} km²). "
+                f"Please split into smaller chunks under 1,800 km² each "
+                f"(roughly the size of Bangkok metro)."
+            )
 
         total_features = 0
         zip_parts = []     # vector: (gdf, slug)
@@ -339,12 +365,19 @@ class ClipService:
                 else:
                     gdf = load_layer_from_file(slug, bbox=aoi_geom.bounds)
                     clipped = clip_layer(gdf, aoi_geom)
+                    # Drop the source frame as soon as we have the clipped
+                    # subset — for ms_buildings_urban this releases hundreds
+                    # of MB while we move on to the next layer.
+                    del gdf
                     if clipped.empty:
                         continue
                     total_features += len(clipped)
                     zip_parts.append((clipped, slug))
             except FileNotFoundError:
                 continue
+            finally:
+                import gc as _gc
+                _gc.collect()
 
         if not zip_parts and not raster_parts:
             raise ValueError("No data found for selected layers. Run the appropriate fetcher first.")

@@ -5,6 +5,9 @@ Thai GeoData Hub — FastAPI Backend (v2 with S3 + Stripe)
 import os
 import sys
 import json
+import gc
+import ctypes
+import asyncio
 import tempfile
 import logging
 from pathlib import Path
@@ -70,6 +73,42 @@ from payments import router as payments_router, get_user_credits_db, deduct_cred
 app.include_router(payments_router)
 
 clip_service = ClipService()
+
+
+# ─────────────────────────────────────────────
+# Memory management helpers (Phase 1 OOM fix)
+# ─────────────────────────────────────────────
+# Why this exists:
+#   Python on Linux glibc holds freed heap memory in its own pool and rarely
+#   returns it to the OS. After a few /clip-data requests that each load
+#   100-500 MB of geo data, RSS climbs and never comes back down until OOM.
+#   gc.collect() releases Python objects; malloc_trim(0) tells glibc to give
+#   the OS back the now-unused arenas.
+#
+#   This brings memory back to baseline after each heavy request instead of
+#   accumulating until Railway kills us at 8 GB.
+
+try:
+    _LIBC = ctypes.CDLL("libc.so.6")
+except OSError:
+    _LIBC = None  # not on Linux (e.g. local dev on Windows/macOS) — no-op
+
+
+def _free_memory() -> None:
+    """Release Python and glibc heap memory back to the OS. Cheap (~5 ms)."""
+    gc.collect()
+    if _LIBC is not None:
+        try:
+            _LIBC.malloc_trim(0)
+        except Exception:
+            pass
+
+
+# Only allow ONE heavy clip-data request at a time per container. Other
+# requests wait their turn instead of all eating memory simultaneously.
+# Bump to 2 once we've migrated to pyogrio (Phase 2). uvicorn's own worker
+# pool is single-process, so this is sufficient on Railway Hobby.
+_CLIP_SEMAPHORE = asyncio.Semaphore(1)
 
 
 # ─────────────────────────────────────────────
@@ -335,10 +374,13 @@ def preview_aoi(request: ClipDataRequest):
     except Exception as e:
         log.error(f"preview failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        # Reclaim heap from geopandas/fiona temporaries every preview.
+        _free_memory()
 
 
 @app.post("/clip-data")
-def clip_data(request: ClipDataRequest, background_tasks: BackgroundTasks):
+async def clip_data(request: ClipDataRequest, background_tasks: BackgroundTasks):
     """
     Clip layers to AOI → upload ZIP to S3 → return presigned URL.
 
@@ -358,61 +400,82 @@ def clip_data(request: ClipDataRequest, background_tasks: BackgroundTasks):
             detail=f"Unsupported target_crs '{target_crs}'. Allowed: {sorted(ALLOWED_CRS)}",
         )
 
-    # ── Execute clipping ──
-    try:
-        result = clip_service.clip_and_package(
-            aoi_geojson=request.aoi.model_dump(),
-            layer_slugs=request.layers,
-            formats=request.formats,
-            user_id=user_id,
-            use_credits=(credits_needed > 0),
-            target_crs=target_crs,
+    # ── Reject if container is already busy with another heavy clip ──
+    # asyncio.Semaphore + a short non-blocking try-acquire: if someone else
+    # is mid-clip, return 503 immediately rather than queuing forever and
+    # piling on memory pressure. Frontend retry banner will surface a
+    # friendly "server busy" message.
+    if _CLIP_SEMAPHORE.locked():
+        raise HTTPException(
+            status_code=503,
+            detail="Server is busy clipping another request. Please retry in 30 seconds.",
         )
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        log.error(f"clip_data failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
 
-    # ── Cleanup local temp file after S3 upload ──
-    local_path = result.get("local_zip_path")
-    if local_path and result.get("presigned_url"):
-        background_tasks.add_task(cleanup_local_file, local_path)
-
-    # ── Save to download history ──
-    if user_id:
+    async with _CLIP_SEMAPHORE:
+        # Run blocking clip in a thread so we don't starve the event loop
+        # and other endpoints (health, layers, search) stay responsive.
+        loop = asyncio.get_event_loop()
         try:
-            save_download(
-                user_id=user_id,
-                download_id=result["download_id"],
-                filename=result["filename"],
-                layers=request.layers,
-                formats=request.formats,
-                size_mb=result["size_mb"],
-                total_features=result["total_features"],
-                s3_key=result.get("s3_key"),
-                credits_used=credits_needed,
+            result = await loop.run_in_executor(
+                None,
+                lambda: clip_service.clip_and_package(
+                    aoi_geojson=request.aoi.model_dump(),
+                    layer_slugs=request.layers,
+                    formats=request.formats,
+                    user_id=user_id,
+                    use_credits=(credits_needed > 0),
+                    target_crs=target_crs,
+                ),
             )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
         except Exception as e:
-            log.warning(f"Failed to save download history: {e}")
+            log.error(f"clip_data failed: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
+        finally:
+            # Always release heap, even on error — geopandas may have
+            # already loaded hundreds of MB before throwing.
+            _free_memory()
 
-    # ── Return presigned URL or fallback ──
-    if result.get("presigned_url"):
-        return {
-            "download_id": result["download_id"],
-            "presigned_url": result["presigned_url"],
-            "expires_in_seconds": result["expires_in_seconds"],
-            "filename": result["filename"],
-            "size_mb": result["size_mb"],
-            "total_features": result["total_features"],
-            "layers_included": result["layers_included"],
-            "formats_included": result["formats_included"],
-            "credits_used": credits_needed,
-        }
-    else:
-        # S3 unavailable — fall back to direct download
-        download_id = result["download_id"]
-        return RedirectResponse(url=f"/download/{download_id}", status_code=303)
+        # ── Cleanup local temp file after S3 upload ──
+        local_path = result.get("local_zip_path")
+        if local_path and result.get("presigned_url"):
+            background_tasks.add_task(cleanup_local_file, local_path)
+
+        # ── Save to download history ──
+        if user_id:
+            try:
+                save_download(
+                    user_id=user_id,
+                    download_id=result["download_id"],
+                    filename=result["filename"],
+                    layers=request.layers,
+                    formats=request.formats,
+                    size_mb=result["size_mb"],
+                    total_features=result["total_features"],
+                    s3_key=result.get("s3_key"),
+                    credits_used=credits_needed,
+                )
+            except Exception as e:
+                log.warning(f"Failed to save download history: {e}")
+
+        # ── Return presigned URL or fallback ──
+        if result.get("presigned_url"):
+            return {
+                "download_id": result["download_id"],
+                "presigned_url": result["presigned_url"],
+                "expires_in_seconds": result["expires_in_seconds"],
+                "filename": result["filename"],
+                "size_mb": result["size_mb"],
+                "total_features": result["total_features"],
+                "layers_included": result["layers_included"],
+                "formats_included": result["formats_included"],
+                "credits_used": credits_needed,
+            }
+        else:
+            # S3 unavailable — fall back to direct download
+            download_id = result["download_id"]
+            return RedirectResponse(url=f"/download/{download_id}", status_code=303)
 
 
 @app.get("/download/{download_id}")
